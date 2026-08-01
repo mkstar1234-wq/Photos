@@ -267,7 +267,9 @@ function setupDatabaseListeners() {
     dbRef.child('folders').on('value', (snapshot) => {
       const val = snapshot.val();
       if (val) {
-        appState.folders = Object.values(val);
+        appState.folders = Object.values(val).filter(
+          (f) => f && f.name && !f.id.startsWith('f_month_')
+        );
       } else {
         appState.folders = DEFAULT_FOLDERS;
         dbRef.child('folders').set(
@@ -293,7 +295,10 @@ function setupDatabaseListeners() {
 function loadLocalData() {
   try {
     const rawF = localStorage.getItem('app_folders');
-    appState.folders = rawF ? JSON.parse(rawF) : DEFAULT_FOLDERS;
+    const loadedF = rawF ? JSON.parse(rawF) : DEFAULT_FOLDERS;
+    appState.folders = loadedF.filter(
+      (f) => f && f.name && !f.id.startsWith('f_month_')
+    );
 
     const rawR = localStorage.getItem('app_receipts');
     appState.receipts = rawR ? JSON.parse(rawR) : [];
@@ -325,26 +330,9 @@ function saveLocalData() {
   } catch (e) {}
 }
 
-// Ensure dynamic Month folder exists
+// Get current auto-month string without creating root folder cards
 function ensureAutoMonthFolderExists() {
-  const currentMonthFolder = getAutoMonthFolderName();
-  const exists = appState.folders.some(
-    (f) => f.name.toLowerCase() === currentMonthFolder.toLowerCase()
-  );
-
-  if (!exists) {
-    const newMonthFolder = {
-      id: 'f_month_' + Date.now(),
-      name: currentMonthFolder,
-      color: '#10b981'
-    };
-    appState.folders.unshift(newMonthFolder);
-    if (appState.firebaseConnected && dbRef) {
-      dbRef.child('folders').child(newMonthFolder.id).set(newMonthFolder);
-    }
-    saveLocalData();
-  }
-  return currentMonthFolder;
+  return getAutoMonthFolderName();
 }
 
 // ============================================================================
@@ -587,14 +575,10 @@ function populateFolderDropdowns() {
   const currentMonthFolder = getAutoMonthFolderName();
 
   if (uploadSelect) {
-    const optionsHtml =
-      `<option value="${currentMonthFolder}">⭐ Auto-Month (${currentMonthFolder})</option>` +
-      appState.folders
-        .filter((f) => f.name !== currentMonthFolder)
-        .map((f) => `<option value="${f.name}">${f.name}</option>`)
-        .join('');
-
-    uploadSelect.innerHTML = optionsHtml;
+    const optionsHtml = appState.folders
+      .map((f) => `<option value="${f.name}">${f.name}</option>`)
+      .join('');
+    uploadSelect.innerHTML = optionsHtml || '<option value="General">General</option>';
   }
 
   if (searchFilter) {
@@ -632,7 +616,7 @@ function populateFolderDropdowns() {
     const sortedMonths = Array.from(monthsSet);
 
     searchMonthFilter.innerHTML =
-      '<option value="ALL">All Month Folders</option>' +
+      '<option value="ALL">All Month Sub-Folders</option>' +
       sortedMonths.map((m) => `<option value="${m}">${m}</option>`).join('');
 
     searchMonthFilter.value = currentVal;
@@ -851,31 +835,21 @@ function renderFoldersManagement() {
   const container = document.getElementById('folders-management-list');
   if (!container) return;
 
-  const currentMonthFolder = getAutoMonthFolderName();
-  const folderNamesSet = new Set();
+  const manualFolders = appState.folders.filter(
+    (f) => f && f.name && !f.id.startsWith('f_month_')
+  );
 
-  folderNamesSet.add(currentMonthFolder);
-  appState.folders.forEach((f) => folderNamesSet.add(f.name));
-  appState.receipts.forEach((r) => {
-    if (r.folderName) folderNamesSet.add(r.folderName);
-    if (r.monthFolder) folderNamesSet.add(r.monthFolder);
-  });
-
-  const folderNames = Array.from(folderNamesSet);
-
-  if (!folderNames.length) {
+  if (!manualFolders.length) {
     container.innerHTML = `<div class="py-8 text-center text-slate-500 text-xs">No folders created yet. Create one above!</div>`;
     return;
   }
 
-  container.innerHTML = folderNames
-    .map((fName) => {
+  container.innerHTML = manualFolders
+    .map((folderObj) => {
+      const fName = folderObj.name;
       const folderReceipts = appState.receipts.filter(
-        (r) => r.folderName === fName || r.monthFolder === fName
+        (r) => r.folderName === fName || (r.folderName && r.folderName.toLowerCase() === fName.toLowerCase())
       );
-
-      const isCustom = appState.folders.some((f) => f.name === fName);
-      const customFolderObj = appState.folders.find((f) => f.name === fName);
 
       let itemsGridHtml = '';
       if (folderReceipts.length === 0) {
@@ -891,7 +865,10 @@ function renderFoldersManagement() {
             </div>
             <div class="min-w-0">
               <h5 class="text-[11px] font-bold text-slate-200 truncate">${item.title || 'Receipt'}</h5>
-              <p class="text-[9px] text-slate-400 font-mono">${item.timestamp ? new Date(item.timestamp).toLocaleDateString() : ''}</p>
+              <div class="flex items-center justify-between text-[9px] text-slate-400 font-mono mt-0.5">
+                <span class="text-emerald-400 truncate max-w-[80px]">${item.monthFolder || ''}</span>
+                <span>${item.timestamp ? new Date(item.timestamp).toLocaleDateString() : ''}</span>
+              </div>
             </div>
           </div>`
           )
@@ -901,10 +878,10 @@ function renderFoldersManagement() {
       const safeFName = fName.replace(/'/g, "\\'");
 
       return `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md">
-        <!-- Folder Header with Add to Home Button -->
+        <!-- Folder Header with Add to Home & Delete Buttons -->
         <div class="flex items-center justify-between pb-1 border-b border-slate-800/60">
           <div class="flex items-center space-x-2">
-            <div class="w-2.5 h-2.5 rounded-full ${isCustom ? 'bg-emerald-400' : 'bg-blue-400'} flex-shrink-0"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0"></div>
             <h3 class="text-xs font-bold text-slate-100 truncate max-w-[120px] sm:max-w-[200px]">${fName}</h3>
             <span class="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 flex-shrink-0">
               ${folderReceipts.length} ${folderReceipts.length === 1 ? 'item' : 'items'}
@@ -916,24 +893,20 @@ function renderFoldersManagement() {
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
               <span>+Home</span>
             </button>
-            ${
-              isCustom && customFolderObj
-                ? `<button type="button" onclick="deleteFolder('${customFolderObj.id}')" title="Delete Folder" class="p-1.5 text-slate-500 hover:text-red-400 transition cursor-pointer">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-              </button>`
-                : ''
-            }
+            <button type="button" onclick="deleteFolder('${folderObj.id}')" title="Delete Folder" class="p-1.5 text-slate-500 hover:text-red-400 transition cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
           </div>
         </div>
 
-        <!-- STRICT and MINIMAL Upload Section: LEFT (Gallery), RIGHT (Camera) -->
+        <!-- 2x2 Grid Upload Section: LEFT (Gallery), RIGHT (Camera) -->
         <div class="grid grid-cols-2 gap-2.5">
-          <button type="button" onclick="triggerFolderGalleryUpload('${fName}')" class="p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl flex items-center justify-center space-x-2 text-slate-200 hover:border-blue-500/40 transition cursor-pointer font-bold text-xs shadow-sm">
+          <button type="button" onclick="triggerFolderGalleryUpload('${safeFName}')" class="p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl flex items-center justify-center space-x-2 text-slate-200 hover:border-blue-500/40 transition cursor-pointer font-bold text-xs shadow-sm">
             <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
             <span>Gallery</span>
           </button>
 
-          <button type="button" onclick="triggerFolderCameraUpload('${fName}')" class="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl flex items-center justify-center space-x-2 transition cursor-pointer font-bold text-xs shadow-sm">
+          <button type="button" onclick="triggerFolderCameraUpload('${safeFName}')" class="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl flex items-center justify-center space-x-2 transition cursor-pointer font-bold text-xs shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <span>Camera</span>
           </button>
@@ -1233,23 +1206,72 @@ function showToast(message, type = 'info') {
 
 // Delete actions
 function deleteReceipt(id) {
+  const receiptObj = appState.receipts.find((r) => r.id === id);
   if (appState.firebaseConnected && dbRef) {
     dbRef.child('receipts').child(id).remove();
+  }
+  if (appState.firebaseConnected && storageRef && receiptObj && receiptObj.storagePath) {
+    storageRef.child(receiptObj.storagePath).delete().catch((err) => console.warn(err));
   }
   appState.receipts = appState.receipts.filter((r) => r.id !== id);
   saveLocalData();
   renderAllViews();
+  if (appState.selectedModalReceipt && appState.selectedModalReceipt.id === id) {
+    closeModal();
+  }
   showToast('Receipt deleted successfully', 'success');
 }
 
-function deleteFolder(id) {
-  appState.folders = appState.folders.filter((f) => f.id !== id);
+async function deleteFolder(id) {
+  const folderObj = appState.folders.find((f) => f.id === id);
+  if (!folderObj) return;
+
+  const fName = folderObj.name;
+  if (!confirm(`Are you sure you want to delete folder "${fName}" and all its contents?`)) {
+    return;
+  }
+
+  showToast(`Deleting folder "${fName}" and cleaning storage...`, 'info');
+
+  const folderReceipts = appState.receipts.filter(
+    (r) => r.folderName === fName || (r.folderName && r.folderName.toLowerCase() === fName.toLowerCase())
+  );
+
+  // 1. Delete all images from Firebase Storage
+  if (appState.firebaseConnected && storageRef) {
+    folderReceipts.forEach((r) => {
+      if (r.storagePath) {
+        storageRef.child(r.storagePath).delete().catch((err) => console.warn('Storage item delete error:', err));
+      }
+    });
+
+    try {
+      const folderStorageRef = storageRef.child(`receipts/${fName}`);
+      const filesInFolder = await listAllFilesRecursively(folderStorageRef);
+      filesInFolder.forEach((fileRef) => {
+        fileRef.delete().catch((err) => console.warn('Storage folder file delete error:', err));
+      });
+    } catch (err) {
+      console.warn('Storage delete folder error:', fName, err);
+    }
+  }
+
+  // 2. Delete from Realtime DB
   if (appState.firebaseConnected && dbRef) {
     dbRef.child('folders').child(id).remove();
+    folderReceipts.forEach((r) => {
+      dbRef.child('receipts').child(r.id).remove();
+    });
   }
+
+  // 3. Update local state
+  const receiptIdsToDelete = new Set(folderReceipts.map((r) => r.id));
+  appState.folders = appState.folders.filter((f) => f.id !== id);
+  appState.receipts = appState.receipts.filter((r) => !receiptIdsToDelete.has(r.id));
+
   saveLocalData();
   renderAllViews();
-  showToast('Folder deleted', 'info');
+  showToast(`Folder "${fName}" and all nested sub-folders/images deleted!`, 'success');
 }
 
 // ============================================================================
@@ -1268,9 +1290,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const monthFolder = ensureAutoMonthFolderExists();
+    const monthFolder = getAutoMonthFolderName();
     const folderSelect = document.getElementById('upload-folder-select');
-    const selectedFolder = activeUploadFolder || (folderSelect ? folderSelect.value : monthFolder) || monthFolder;
+    const defaultFolderName = appState.folders[0]?.name || 'General';
+    const selectedFolder = activeUploadFolder || (folderSelect ? folderSelect.value : defaultFolderName) || defaultFolderName;
 
     showToast(`Uploading to "${selectedFolder}"...`, 'info');
 
@@ -1284,11 +1307,15 @@ document.addEventListener('DOMContentLoaded', function () {
       const title = `Receipt ${formattedDate}`;
       const imageSizeBytes = Math.round((compressedUrl.length * 3) / 4);
 
+      // Save automatically inside internal sub-folder: [ManualFolderName]/[Month Year]/[filename]
+      const storagePath = `receipts/${selectedFolder}/${monthFolder}/${recId}_${file.name}`;
+
       const newRecord = {
         id: recId,
         title: title,
         folderName: selectedFolder,
         monthFolder: monthFolder,
+        storagePath: storagePath,
         imageUrl: compressedUrl,
         timestamp: Date.now(),
         sizeBytes: imageSizeBytes
@@ -1297,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // Firebase Storage & Realtime DB sync
       if (appState.firebaseConnected && storageRef) {
         try {
-          const fileRef = storageRef.child(`receipts/${monthFolder}/${recId}_${file.name}`);
+          const fileRef = storageRef.child(storagePath);
           fileRef.putString(compressedUrl, 'data_url').then((snapshot) => {
             snapshot.ref.getDownloadURL().then((downloadURL) => {
               newRecord.imageUrl = downloadURL;
@@ -1317,7 +1344,7 @@ document.addEventListener('DOMContentLoaded', function () {
       appState.receipts.unshift(newRecord);
       saveLocalData();
       renderAllViews();
-      showToast(`Receipt uploaded to "${selectedFolder}"!`, 'success');
+      showToast(`Receipt saved to "${selectedFolder}" / "${monthFolder}"!`, 'success');
     } catch (err) {
       console.error('Error uploading receipt:', err);
       showToast('Error processing image', 'error');
