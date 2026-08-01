@@ -770,6 +770,8 @@ function generateFolderAppIcon(folderName) {
 let currentAthFolder = '';
 let currentAthIconUrl = '';
 let deferredInstallPrompt = null;
+let currentFullscreenFolder = '';
+let fullscreenSessionCount = 0;
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -778,25 +780,59 @@ window.addEventListener('beforeinstallprompt', (e) => {
   if (pwaBtn) pwaBtn.classList.remove('hidden');
 });
 
-function openAddToHomeScreenModal(folderName) {
-  currentAthFolder = folderName;
-  const iconDataUrl = generateFolderAppIcon(folderName);
-  currentAthIconUrl = iconDataUrl;
+/**
+ * PROBLEM 1: DYNAMIC MANIFEST FOR MULTIPLE SHORTCUTS
+ * Generates a dynamic Blob manifest for the specific folder so each shortcut created has:
+ * - A UNIQUE name
+ * - A UNIQUE start_url (?folder=[FolderName]&action=camera)
+ * - A custom generated canvas icon Blob URL
+ */
+function updateDynamicManifest(folderName, iconDataUrl) {
+  const startUrl = `/?folder=${encodeURIComponent(folderName)}&action=camera`;
 
-  const previewImg = document.getElementById('ath-preview-icon');
-  if (previewImg) previewImg.src = iconDataUrl;
+  const dynamicManifestObj = {
+    name: `${folderName} - Camera`,
+    short_name: folderName,
+    description: `Direct camera photo capture shortcut for ${folderName}`,
+    start_url: startUrl,
+    display: 'standalone',
+    background_color: '#020617',
+    theme_color: '#10b981',
+    icons: [
+      {
+        src: iconDataUrl,
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any maskable'
+      },
+      {
+        src: iconDataUrl,
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any maskable'
+      }
+    ]
+  };
 
-  const folderNameEl = document.getElementById('ath-folder-name');
-  if (folderNameEl) folderNameEl.textContent = folderName;
+  const manifestBlob = new Blob([JSON.stringify(dynamicManifestObj, null, 2)], {
+    type: 'application/manifest+json'
+  });
+  const manifestBlobUrl = URL.createObjectURL(manifestBlob);
 
-  const targetUrl = new URL(window.location.origin + window.location.pathname);
-  targetUrl.searchParams.set('targetFolder', folderName);
-  targetUrl.searchParams.set('action', 'autoCamera');
+  let manifestLink = document.getElementById('app-dynamic-manifest');
+  if (!manifestLink) {
+    manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+      manifestLink.id = 'app-dynamic-manifest';
+    } else {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      manifestLink.id = 'app-dynamic-manifest';
+      document.head.appendChild(manifestLink);
+    }
+  }
+  manifestLink.href = manifestBlobUrl;
 
-  const urlPreviewEl = document.getElementById('ath-folder-url-preview');
-  if (urlPreviewEl) urlPreviewEl.textContent = targetUrl.search;
-
-  // Set dynamic apple-touch-icon in head
   let appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
   if (!appleIcon) {
     appleIcon = document.createElement('link');
@@ -804,6 +840,30 @@ function openAddToHomeScreenModal(folderName) {
     document.head.appendChild(appleIcon);
   }
   appleIcon.href = iconDataUrl;
+
+  let appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (appleTitleMeta) {
+    appleTitleMeta.setAttribute('content', `${folderName} Cam`);
+  }
+
+  return startUrl;
+}
+
+function openAddToHomeScreenModal(folderName) {
+  currentAthFolder = folderName;
+  const iconDataUrl = generateFolderAppIcon(folderName);
+  currentAthIconUrl = iconDataUrl;
+
+  const relativeStartUrl = updateDynamicManifest(folderName, iconDataUrl);
+
+  const previewImg = document.getElementById('ath-preview-icon');
+  if (previewImg) previewImg.src = iconDataUrl;
+
+  const folderNameEl = document.getElementById('ath-folder-name');
+  if (folderNameEl) folderNameEl.textContent = folderName;
+
+  const urlPreviewEl = document.getElementById('ath-folder-url-preview');
+  if (urlPreviewEl) urlPreviewEl.textContent = relativeStartUrl;
 
   const pwaBtn = document.getElementById('btn-modal-pwa-install');
   if (pwaBtn) {
@@ -823,42 +883,92 @@ function closeAddToHomeScreenModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+/**
+ * PROBLEM 2 & 3: FULL-SCREEN CAMERA TRIGGER (USER GESTURE FIX)
+ * On page load, if URLSearchParams detects action=camera (or autoCamera) & folder:
+ * - Completely hides normal app UI
+ * - Shows full-screen UI with massive Camera Button ("Tap to Open Camera for [FolderName]")
+ */
 function checkFolderShortcutQuery() {
   const urlParams = new URLSearchParams(window.location.search);
-  const targetFolder = urlParams.get('targetFolder') || urlParams.get('folder');
+  const targetFolder = urlParams.get('folder') || urlParams.get('targetFolder');
   const action = urlParams.get('action');
 
-  if (targetFolder) {
-    if (action === 'autoCamera') {
-      // 2. STARTUP INTERCEPT (BYPASS UI)
-      switchTab('folders');
-      activeUploadFolder = targetFolder;
-
-      // Clean up URL parameters immediately so browser reload won't re-trigger loop
-      window.history.replaceState({}, document.title, window.location.pathname);
-
-      showToast(`Deep Link: Triggering camera for "${targetFolder}"...`, 'info');
-
-      // 3. INSTANT CAMERA TRIGGER
-      setTimeout(() => {
-        triggerFolderCameraUpload(targetFolder);
-      }, 200);
-    } else {
-      // Fallback: If shortcut opened without autoCamera action parameter
-      switchTab('folders');
-      showToast(`Folder shortcut loaded: "${targetFolder}"`, 'info');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setTimeout(() => {
-        const folderCards = document.querySelectorAll('#folders-management-list > div');
-        folderCards.forEach((card) => {
-          if (card.textContent && card.textContent.includes(targetFolder)) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.classList.add('ring-2', 'ring-emerald-400');
-          }
-        });
-      }, 250);
-    }
+  if (targetFolder && (action === 'camera' || action === 'autoCamera')) {
+    activateFullscreenCameraView(targetFolder);
+  } else if (targetFolder) {
+    // Normal folder view fallback
+    switchTab('folders');
+    showToast(`Folder shortcut loaded: "${targetFolder}"`, 'info');
+    setTimeout(() => {
+      const folderCards = document.querySelectorAll('#folders-management-list > div');
+      folderCards.forEach((card) => {
+        if (card.textContent && card.textContent.includes(targetFolder)) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('ring-2', 'ring-emerald-400');
+        }
+      });
+    }, 250);
   }
+}
+
+function activateFullscreenCameraView(folderName) {
+  currentFullscreenFolder = folderName;
+  fullscreenSessionCount = 0;
+
+  // 1. Hide normal app containers & navigation
+  const mainWrapper = document.getElementById('main-app-wrapper');
+  if (mainWrapper) mainWrapper.classList.add('hidden');
+
+  const navBar = document.querySelector('nav');
+  if (navBar) navBar.classList.add('hidden');
+
+  const header = document.querySelector('header');
+  if (header) header.classList.add('hidden');
+
+  // 2. Show Fullscreen Camera View
+  const cameraView = document.getElementById('fullscreen-camera-view');
+  if (cameraView) cameraView.classList.remove('hidden');
+
+  // 3. Populate labels
+  const monthFolder = getAutoMonthFolderName();
+
+  const folderBadge = document.getElementById('fullscreen-folder-name-badge');
+  if (folderBadge) folderBadge.textContent = folderName;
+
+  const monthBadge = document.getElementById('fullscreen-month-badge');
+  if (monthBadge) monthBadge.textContent = monthFolder;
+
+  const titleEl = document.getElementById('fullscreen-camera-title');
+  if (titleEl) titleEl.textContent = `Tap to Open Camera for "${folderName}"`;
+
+  const previewEl = document.getElementById('fullscreen-storage-path-preview');
+  if (previewEl) previewEl.textContent = `receipts/${folderName}/${monthFolder}/[filename]`;
+
+  const sessionCountEl = document.getElementById('fullscreen-session-count');
+  if (sessionCountEl) sessionCountEl.textContent = '0';
+
+  const sessionCounterCard = document.getElementById('fullscreen-session-counter');
+  if (sessionCounterCard) sessionCounterCard.classList.add('hidden');
+
+  showToast(`Direct Camera Mode ready for "${folderName}"`, 'info');
+}
+
+function exitFullscreenCameraView() {
+  const cameraView = document.getElementById('fullscreen-camera-view');
+  if (cameraView) cameraView.classList.add('hidden');
+
+  const mainWrapper = document.getElementById('main-app-wrapper');
+  if (mainWrapper) mainWrapper.classList.remove('hidden');
+
+  const navBar = document.querySelector('nav');
+  if (navBar) navBar.classList.remove('hidden');
+
+  const header = document.querySelector('header');
+  if (header) header.classList.remove('hidden');
+
+  window.history.replaceState({}, document.title, window.location.pathname);
+  switchTab('folders');
 }
 
 function renderFoldersManagement() {
@@ -1600,9 +1710,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const link =
       window.location.origin +
       window.location.pathname +
-      '?targetFolder=' +
+      '?folder=' +
       encodeURIComponent(currentAthFolder) +
-      '&action=autoCamera';
+      '&action=camera';
     navigator.clipboard.writeText(link);
     showToast(`Deep Link Camera Shortcut copied for "${currentAthFolder}"!`, 'success');
   });
@@ -1616,6 +1726,91 @@ document.addEventListener('DOMContentLoaded', function () {
     a.click();
     document.body.removeChild(a);
     showToast('Folder launcher icon downloaded!', 'success');
+  });
+
+  // Full-Screen Camera View Interaction & Upload Handlers
+  document.getElementById('btn-fullscreen-camera-trigger')?.addEventListener('click', function () {
+    const fsInput = document.getElementById('fullscreen-camera-input');
+    if (fsInput) {
+      fsInput.click();
+    }
+  });
+
+  document.getElementById('btn-exit-fullscreen-camera')?.addEventListener('click', function () {
+    exitFullscreenCameraView();
+  });
+
+  const fsCameraInput = document.getElementById('fullscreen-camera-input');
+  fsCameraInput?.addEventListener('change', async function (e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const selectedFolder = currentFullscreenFolder || 'General';
+    const monthFolder = getAutoMonthFolderName();
+
+    showToast(`Uploading photo to "${selectedFolder}"...`, 'info');
+
+    const targetWidth = appState.qualityPreference === 'ultralow' ? 360 : 640;
+
+    try {
+      const compressedUrl = await compressImage(file, targetWidth);
+      const recId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const title = `Receipt ${formattedDate}`;
+      const imageSizeBytes = Math.round((compressedUrl.length * 3) / 4);
+
+      // Path: [targetFolder]/[Month Year]/[photo_filename]
+      const storagePath = `receipts/${selectedFolder}/${monthFolder}/${recId}_${file.name}`;
+
+      const newRecord = {
+        id: recId,
+        title: title,
+        folderName: selectedFolder,
+        monthFolder: monthFolder,
+        storagePath: storagePath,
+        imageUrl: compressedUrl,
+        timestamp: Date.now(),
+        sizeBytes: imageSizeBytes
+      };
+
+      if (appState.firebaseConnected && storageRef) {
+        try {
+          const fileRef = storageRef.child(storagePath);
+          fileRef.putString(compressedUrl, 'data_url').then((snapshot) => {
+            snapshot.ref.getDownloadURL().then((downloadURL) => {
+              newRecord.imageUrl = downloadURL;
+              if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+            });
+          }).catch((err) => {
+            console.warn('Storage upload fallback:', err);
+            if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+          });
+        } catch (err) {
+          if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+        }
+      } else if (appState.firebaseConnected && dbRef) {
+        dbRef.child('receipts').child(newRecord.id).set(newRecord);
+      }
+
+      appState.receipts.unshift(newRecord);
+      saveLocalData();
+      renderAllViews();
+
+      fullscreenSessionCount++;
+      const sessionCountEl = document.getElementById('fullscreen-session-count');
+      if (sessionCountEl) sessionCountEl.textContent = fullscreenSessionCount.toString();
+
+      const sessionCounterCard = document.getElementById('fullscreen-session-counter');
+      if (sessionCounterCard) sessionCounterCard.classList.remove('hidden');
+
+      showToast(`Photo saved to "${selectedFolder}" / "${monthFolder}"!`, 'success');
+    } catch (err) {
+      console.error('Error uploading photo from direct camera view:', err);
+      showToast('Error uploading photo', 'error');
+    } finally {
+      if (fsCameraInput) fsCameraInput.value = '';
+    }
   });
 
   document.getElementById('btn-modal-pwa-install')?.addEventListener('click', async function () {

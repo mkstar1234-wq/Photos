@@ -42,27 +42,29 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950 min-h-screen flex flex-col">
 
-  <!-- Top Navigation Header -->
-  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
-    <div class="max-w-4xl mx-auto flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-          </svg>
+  <!-- Main App Wrapper (hidden when full-screen camera view is active) -->
+  <div id="main-app-wrapper" class="flex-1 flex flex-col min-h-screen">
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+      <div class="max-w-4xl mx-auto flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-sm font-bold text-slate-100 tracking-wide">Receipt Organizer</h1>
+            <p class="text-[10px] text-slate-400 font-mono" id="header-status-subtitle">Checking connection...</p>
+          </div>
         </div>
-        <div>
-          <h1 class="text-sm font-bold text-slate-100 tracking-wide">Receipt Organizer</h1>
-          <p class="text-[10px] text-slate-400 font-mono" id="header-status-subtitle">Checking connection...</p>
-        </div>
-      </div>
 
-      <div id="connection-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/20 flex items-center space-x-1.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-        <span id="connection-badge-text">Local Mode</span>
+        <div id="connection-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/20 flex items-center space-x-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="connection-badge-text">Local Mode</span>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
   <!-- Main Content Container -->
   <main class="flex-1 max-w-4xl w-full mx-auto px-4 pt-4 pb-28">
@@ -385,6 +387,69 @@
       <!-- Dynamic Nav Items Rendered by script.js -->
     </div>
   </nav>
+  </div> <!-- End #main-app-wrapper -->
+
+  <!-- Full-Screen Camera Interface for Shortcut Deep Linking (Bypasses UI & Enables User Gesture) -->
+  <div id="fullscreen-camera-view" class="hidden fixed inset-0 z-[2000] bg-slate-950 flex flex-col justify-between p-5 text-slate-100 overflow-y-auto">
+    <!-- Top Header Bar -->
+    <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+      <div class="flex items-center space-x-2.5">
+        <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Camera Mode</h2>
+          <div class="flex items-center space-x-2 mt-0.5">
+            <span id="fullscreen-folder-name-badge" class="text-sm font-extrabold text-emerald-400 font-mono">Folder</span>
+            <span id="fullscreen-month-badge" class="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800 font-mono">Month</span>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" id="btn-exit-fullscreen-camera" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer">
+        <span>Open Full App</span>
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+      </button>
+    </div>
+
+    <!-- Center Massive Camera Button Card -->
+    <div class="my-auto py-8 flex flex-col items-center justify-center text-center space-y-6 max-w-sm mx-auto w-full">
+      <!-- Hidden Native Camera File Input -->
+      <input type="file" id="fullscreen-camera-input" accept="image/*" capture="environment" class="hidden" />
+
+      <!-- Massive Camera Trigger Button -->
+      <button type="button" id="btn-fullscreen-camera-trigger" class="group relative w-32 h-32 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full flex items-center justify-center shadow-2xl shadow-emerald-500/30 active:scale-95 transition cursor-pointer">
+        <span class="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping pointer-events-none"></span>
+        <svg class="w-14 h-14 text-slate-950 group-hover:scale-110 transition duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+      </button>
+
+      <div class="space-y-2">
+        <h3 id="fullscreen-camera-title" class="text-base font-bold text-slate-100">Tap to Open Camera for Folder</h3>
+        <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+          Takes photo directly into your folder structure:
+          <br />
+          <code id="fullscreen-storage-path-preview" class="text-[11px] text-emerald-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800/80 mt-1 inline-block">receipts/Folder/Month/photo.jpg</code>
+        </p>
+      </div>
+
+      <!-- Quick Session Upload Counter -->
+      <div id="fullscreen-session-counter" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-3 w-full flex items-center justify-between text-xs">
+        <span class="text-slate-400 font-medium">Photos captured this session:</span>
+        <span id="fullscreen-session-count" class="font-bold text-emerald-400 font-mono text-sm">0</span>
+      </div>
+    </div>
+
+    <!-- Bottom Footer / Helper Info -->
+    <div class="text-center pt-4 border-t border-slate-800/80 text-[11px] text-slate-500">
+      <p>Direct Camera Upload • Mobile Hardware Shortcut</p>
+    </div>
+  </div>
 
   <!-- Image Preview Modal (With Hardware Accelerated Zoom Boundaries Fix) -->
   <div id="image-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col items-center justify-center">
