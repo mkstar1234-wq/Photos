@@ -1,0 +1,6 @@
+{
+  "name": "Receipt Camera Organizer",
+  "description": "Mobile-first receipt camera uploader with low-res canvas compression, Firebase Realtime Database, and Firebase Storage manager.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
