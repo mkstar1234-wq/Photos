@@ -63,7 +63,7 @@
 })();
 
 // ============================================================================
-// 2. STATE MANAGEMENT & CONSTANTS
+// 2. STATE MANAGEMENT & DEFAULT CONSTANTS
 // ============================================================================
 const DEFAULT_FOLDERS = [
   { id: 'f_general', name: 'General', color: '#10b981' },
@@ -73,20 +73,47 @@ const DEFAULT_FOLDERS = [
   { id: 'f_medical', name: 'Medical', color: '#ef4444' }
 ];
 
+const DEFAULT_NAV_ITEMS = [
+  { id: 'home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', visible: true },
+  { id: 'folders', label: 'Folders', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z', visible: true },
+  { id: 'search', label: 'Search', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', visible: true },
+  { id: 'cleanup', label: 'Cleanup', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', visible: true },
+  { id: 'settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', visible: true }
+];
+
 let appState = {
   activeTab: 'home',
   folders: [],
   receipts: [],
+  navItems: DEFAULT_NAV_ITEMS,
   firebaseConnected: false,
-  qualityPreference: 'ultralow', // 'ultralow' (360px), 'verylow' (480px), 'low' (640px)
+  qualityPreference: 'ultralow', // strictly 'ultralow' (360px) or 'low' (640px)
   layoutPreference: 'grid', // 'grid' or 'list'
+  totalAccumulatedBytes: 0,
+  openAccordionId: null, // Exclusive accordion: null means all closed
   previewImageFile: null,
   previewImageDataUrl: null,
-  selectedModalReceipt: null
+  selectedModalReceipt: null,
+  modalZoomScale: 1.0 // Scale for image preview zoom
 };
 
 let dbRef = null;
 let storageRef = null;
+
+// Helper to format byte count
+function formatByteSize(bytes) {
+  if (bytes === 0) return '0 KB';
+  const kb = bytes / 1024;
+  if (kb < 1000) return kb.toFixed(1) + ' KB';
+  const mb = kb / 1024;
+  return mb.toFixed(2) + ' MB';
+}
+
+// Get current month folder name (e.g., "August 2026")
+function getAutoMonthFolderName() {
+  const now = new Date();
+  return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
 
 // ============================================================================
 // 3. FIREBASE HELPER SERVICES & LOCALSTORAGE FALLBACK
@@ -119,7 +146,15 @@ function clearStoredConfig() {
 function parseFirebaseConfigInput(str) {
   if (!str) return null;
   try {
-    return JSON.parse(str);
+    const parsed = JSON.parse(str);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        apiKey: parsed.apiKey || '',
+        databaseURL: parsed.databaseURL || '',
+        projectId: parsed.projectId || '',
+        storageBucket: parsed.storageBucket || ''
+      };
+    }
   } catch (e) {
     try {
       const matchKey = str.match(/apiKey\s*:\s*["']([^"']+)["']/);
@@ -136,8 +171,8 @@ function parseFirebaseConfigInput(str) {
         };
       }
     } catch (e2) {}
-    return null;
   }
+  return null;
 }
 
 function initFirebase() {
@@ -168,16 +203,18 @@ function updateConnectionBadge() {
   const badgeText = document.getElementById('connection-badge-text');
   const subtitle = document.getElementById('header-status-subtitle');
 
+  if (!badge || !badgeText || !subtitle) return;
+
   if (appState.firebaseConnected) {
     badge.className =
       'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 flex items-center space-x-1.5';
-    badgeText.textContent = 'Firebase DB Active';
+    badgeText.textContent = 'Firebase Active';
     subtitle.textContent = 'Synced with Firebase Realtime DB & Storage';
   } else {
     badge.className =
       'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/20 flex items-center space-x-1.5';
     badgeText.textContent = 'Local Mode';
-    subtitle.textContent = 'Local storage mode active';
+    subtitle.textContent = 'Local browser storage mode active';
   }
 }
 
@@ -191,7 +228,6 @@ function checkMagicLink() {
       if (decoded && decoded.apiKey && decoded.databaseURL) {
         saveStoredConfig(decoded);
         showToast('Firebase configuration loaded from Magic Link!', 'success');
-        // Clean URL
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     } catch (e) {
@@ -200,7 +236,7 @@ function checkMagicLink() {
   }
 }
 
-// Realtime Database Listeners with Local Storage Sync
+// Realtime Database Listeners
 function setupDatabaseListeners() {
   if (appState.firebaseConnected && dbRef) {
     dbRef.child('folders').on('value', (snapshot) => {
@@ -233,11 +269,22 @@ function loadLocalData() {
   try {
     const rawF = localStorage.getItem('app_folders');
     appState.folders = rawF ? JSON.parse(rawF) : DEFAULT_FOLDERS;
+
     const rawR = localStorage.getItem('app_receipts');
     appState.receipts = rawR ? JSON.parse(rawR) : [];
+
+    const rawNav = localStorage.getItem('app_nav_config');
+    appState.navItems = rawNav ? JSON.parse(rawNav) : DEFAULT_NAV_ITEMS;
+
+    const rawBytes = localStorage.getItem('app_accumulated_bytes');
+    appState.totalAccumulatedBytes = rawBytes ? parseInt(rawBytes, 10) : 0;
+
+    const savedQuality = localStorage.getItem('app_quality_preference');
+    appState.qualityPreference = (savedQuality === 'low') ? 'low' : 'ultralow';
   } catch (e) {
     appState.folders = DEFAULT_FOLDERS;
     appState.receipts = [];
+    appState.navItems = DEFAULT_NAV_ITEMS;
   }
 }
 
@@ -245,11 +292,36 @@ function saveLocalData() {
   try {
     localStorage.setItem('app_folders', JSON.stringify(appState.folders));
     localStorage.setItem('app_receipts', JSON.stringify(appState.receipts));
+    localStorage.setItem('app_nav_config', JSON.stringify(appState.navItems));
+    localStorage.setItem('app_accumulated_bytes', appState.totalAccumulatedBytes.toString());
+    localStorage.setItem('app_quality_preference', appState.qualityPreference);
   } catch (e) {}
 }
 
+// Ensure dynamic Month folder exists
+function ensureAutoMonthFolderExists() {
+  const currentMonthFolder = getAutoMonthFolderName();
+  const exists = appState.folders.some(
+    (f) => f.name.toLowerCase() === currentMonthFolder.toLowerCase()
+  );
+
+  if (!exists) {
+    const newMonthFolder = {
+      id: 'f_month_' + Date.now(),
+      name: currentMonthFolder,
+      color: '#10b981'
+    };
+    appState.folders.unshift(newMonthFolder);
+    if (appState.firebaseConnected && dbRef) {
+      dbRef.child('folders').child(newMonthFolder.id).set(newMonthFolder);
+    }
+    saveLocalData();
+  }
+  return currentMonthFolder;
+}
+
 // ============================================================================
-// 4. IMAGE COMPRESSION UTILITY (ULTRA-LOW, VERY-LOW, LOW)
+// 4. IMAGE COMPRESSION UTILITY (ULTRA-LOW vs LOW ONLY)
 // ============================================================================
 function compressImage(file, targetWidth) {
   return new Promise((resolve, reject) => {
@@ -272,7 +344,9 @@ function compressImage(file, targetWidth) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        // Quality: 0.55 for ultra-low, 0.70 for low
+        const quality = targetWidth <= 360 ? 0.55 : 0.70;
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve(dataUrl);
       };
       img.onerror = reject;
@@ -284,7 +358,140 @@ function compressImage(file, targetWidth) {
 }
 
 // ============================================================================
-// 5. UI CONTROLLERS & RENDERERS
+// 5. EXCLUSIVE ACCORDION CONTROLLER
+// ============================================================================
+function toggleAccordion(sectionId) {
+  if (appState.openAccordionId === sectionId) {
+    appState.openAccordionId = null; // Close current if open
+  } else {
+    appState.openAccordionId = sectionId; // Open this and close all others
+  }
+  renderAccordionUI();
+}
+
+function closeAllAccordions() {
+  appState.openAccordionId = null;
+  renderAccordionUI();
+}
+
+function renderAccordionUI() {
+  const sectionIds = [
+    'json-config',
+    'individual-fields',
+    'nav-customizer',
+    'upload-quality',
+    'storage-tracker'
+  ];
+
+  sectionIds.forEach((sid) => {
+    const bodyEl = document.getElementById('accordion-' + sid);
+    const chevronEl = document.getElementById('chevron-' + sid);
+
+    if (bodyEl && chevronEl) {
+      if (appState.openAccordionId === sid) {
+        bodyEl.classList.remove('hidden');
+        chevronEl.classList.add('open');
+      } else {
+        bodyEl.classList.add('hidden');
+        chevronEl.classList.remove('open');
+      }
+    }
+  });
+
+  if (appState.openAccordionId === 'nav-customizer') {
+    renderNavConfigUI();
+  } else if (appState.openAccordionId === 'storage-tracker') {
+    renderStorageTrackerUI();
+  }
+}
+
+// ============================================================================
+// 6. BOTTOM NAVIGATION MANAGER & VISIBILITY TOGGLES
+// ============================================================================
+function moveNavItemUp(id) {
+  const index = appState.navItems.findIndex((item) => item.id === id);
+  if (index > 0) {
+    const temp = appState.navItems[index];
+    appState.navItems[index] = appState.navItems[index - 1];
+    appState.navItems[index - 1] = temp;
+    saveLocalData();
+    renderBottomNav();
+    renderNavConfigUI();
+  }
+}
+
+function moveNavItemDown(id) {
+  const index = appState.navItems.findIndex((item) => item.id === id);
+  if (index >= 0 && index < appState.navItems.length - 1) {
+    const temp = appState.navItems[index];
+    appState.navItems[index] = appState.navItems[index + 1];
+    appState.navItems[index + 1] = temp;
+    saveLocalData();
+    renderBottomNav();
+    renderNavConfigUI();
+  }
+}
+
+function toggleNavItemVisibility(id) {
+  const item = appState.navItems.find((i) => i.id === id);
+  if (item) {
+    item.visible = !item.visible;
+    saveLocalData();
+    renderBottomNav();
+    renderNavConfigUI();
+  }
+}
+
+function resetNavItems() {
+  appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS));
+  saveLocalData();
+  renderBottomNav();
+  renderNavConfigUI();
+  showToast('Navigation bar reset to default', 'info');
+}
+
+function renderNavConfigUI() {
+  const container = document.getElementById('nav-items-manager-list');
+  if (!container) return;
+
+  container.innerHTML = appState.navItems
+    .map((item, idx) => {
+      const isFirst = idx === 0;
+      const isLast = idx === appState.navItems.length - 1;
+
+      return `<div class="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <svg class="w-4 h-4 ${item.visible ? 'text-emerald-400' : 'text-slate-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${item.icon}"></path></svg>
+          <span class="text-xs font-bold ${item.visible ? 'text-slate-200' : 'text-slate-500 line-through'}">${item.label}</span>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <!-- Visibility toggle button -->
+          <button type="button" onclick="toggleNavItemVisibility('${item.id}')" class="px-2 py-1 text-[10px] font-bold uppercase rounded border transition ${
+            item.visible
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+              : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+          }">
+            ${item.visible ? 'Visible' : 'Hidden'}
+          </button>
+
+          <!-- Reorder up / down buttons -->
+          <div class="flex items-center space-x-1">
+            <button type="button" onclick="moveNavItemUp('${item.id}')" ${isFirst ? 'disabled' : ''} class="p-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+              ↑
+            </button>
+            <button type="button" onclick="moveNavItemDown('${item.id}')" ${isLast ? 'disabled' : ''} class="p-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+              ↓
+            </button>
+          </div>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+// ============================================================================
+// 7. RENDERERS & VIEW CONTROLLERS
 // ============================================================================
 function switchTab(tabId) {
   appState.activeTab = tabId;
@@ -309,15 +516,14 @@ function renderBottomNav() {
   const container = document.getElementById('bottom-nav-container');
   if (!container) return;
 
-  const tabs = [
-    { id: 'home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-    { id: 'folders', label: 'Folders', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
-    { id: 'search', label: 'Search', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' },
-    { id: 'cleanup', label: 'Cleanup', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' },
-    { id: 'settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
-  ];
+  const visibleTabs = appState.navItems.filter((item) => item.visible);
 
-  container.innerHTML = tabs
+  if (!visibleTabs.length) {
+    container.innerHTML = '<span class="text-xs text-slate-500 py-1">No visible navigation tabs</span>';
+    return;
+  }
+
+  container.innerHTML = visibleTabs
     .map((tab) => {
       const isActive = appState.activeTab === tab.id;
       return `<button type="button" onclick="switchTab('${tab.id}')" class="flex-1 flex flex-col items-center py-1 px-2 rounded-xl transition ${
@@ -336,16 +542,24 @@ function renderAllViews() {
   renderFoldersManagement();
   renderSearchResults();
   renderCleanupView();
+  renderQualityUI();
+  renderStorageTrackerUI();
 }
 
 function populateFolderDropdowns() {
   const uploadSelect = document.getElementById('upload-folder-select');
   const searchFilter = document.getElementById('search-folder-filter');
+  const currentMonthFolder = getAutoMonthFolderName();
 
   if (uploadSelect) {
-    uploadSelect.innerHTML = appState.folders
-      .map((f) => `<option value="${f.name}">${f.name}</option>`)
-      .join('');
+    const optionsHtml =
+      `<option value="${currentMonthFolder}">⭐ Auto-Month (${currentMonthFolder})</option>` +
+      appState.folders
+        .filter((f) => f.name !== currentMonthFolder)
+        .map((f) => `<option value="${f.name}">${f.name}</option>`)
+        .join('');
+
+    uploadSelect.innerHTML = optionsHtml;
   }
 
   if (searchFilter) {
@@ -463,22 +677,102 @@ function renderCleanupView() {
   }
 }
 
-// Modal logic
+function renderQualityUI() {
+  const badge = document.getElementById('home-quality-badge');
+  const btnUltra = document.getElementById('quality-ultralow');
+  const btnLow = document.getElementById('quality-low');
+
+  if (badge) {
+    badge.textContent =
+      appState.qualityPreference === 'ultralow'
+        ? 'Ultra-Low (360px ~15KB)'
+        : 'Low (640px ~50KB)';
+  }
+
+  if (btnUltra && btnLow) {
+    if (appState.qualityPreference === 'ultralow') {
+      btnUltra.className =
+        'p-3 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 text-center cursor-pointer transition';
+      btnLow.className =
+        'p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer transition';
+    } else {
+      btnUltra.className =
+        'p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer transition';
+      btnLow.className =
+        'p-3 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 text-center cursor-pointer transition';
+    }
+  }
+}
+
+function renderStorageTrackerUI() {
+  const accumValEl = document.getElementById('tracker-accumulated-value');
+  const activeCountEl = document.getElementById('tracker-active-count');
+
+  if (accumValEl) {
+    accumValEl.textContent = formatByteSize(appState.totalAccumulatedBytes);
+  }
+  if (activeCountEl) {
+    activeCountEl.textContent = appState.receipts.length + ' receipts';
+  }
+}
+
+// ============================================================================
+// 8. IMAGE ZOOM SAFE MODAL & CONTROLLERS
+// ============================================================================
 function openModal(receiptId) {
   const receipt = appState.receipts.find((r) => r.id === receiptId);
   if (!receipt) return;
 
   appState.selectedModalReceipt = receipt;
-  document.getElementById('modal-image-title').textContent = receipt.title || 'Untitled Receipt';
-  document.getElementById('modal-image-element').src = receipt.imageUrl;
-  document.getElementById('modal-image-date').textContent = new Date(receipt.timestamp).toLocaleString();
+  appState.modalZoomScale = 1.0;
 
+  document.getElementById('modal-image-title').textContent = receipt.title || 'Untitled Receipt';
+  
+  const imgEl = document.getElementById('modal-image-element');
+  imgEl.src = receipt.imageUrl;
+  updateModalZoomTransform();
+
+  document.getElementById('modal-image-date').textContent = new Date(receipt.timestamp).toLocaleString();
   document.getElementById('image-modal').classList.remove('hidden');
 }
 
 function closeModal() {
   document.getElementById('image-modal').classList.add('hidden');
   appState.selectedModalReceipt = null;
+  appState.modalZoomScale = 1.0;
+  updateModalZoomTransform();
+}
+
+function zoomInModal() {
+  if (appState.modalZoomScale < 2.5) { // Safe scale boundary to prevent GPU canvas black screen
+    appState.modalZoomScale = Math.min(2.5, appState.modalZoomScale + 0.25);
+    updateModalZoomTransform();
+  }
+}
+
+function zoomOutModal() {
+  if (appState.modalZoomScale > 0.5) {
+    appState.modalZoomScale = Math.max(0.5, appState.modalZoomScale - 0.25);
+    updateModalZoomTransform();
+  }
+}
+
+function resetZoomModal() {
+  appState.modalZoomScale = 1.0;
+  updateModalZoomTransform();
+}
+
+function updateModalZoomTransform() {
+  const imgEl = document.getElementById('modal-image-element');
+  const levelEl = document.getElementById('modal-zoom-level');
+
+  if (imgEl) {
+    // Hardware acceleration + scale boundary prevents mobile black screen
+    imgEl.style.transform = `translateZ(0) scale(${appState.modalZoomScale})`;
+  }
+  if (levelEl) {
+    levelEl.textContent = Math.round(appState.modalZoomScale * 100) + '%';
+  }
 }
 
 // Toast System
@@ -505,7 +799,7 @@ function showToast(message, type = 'info') {
   }, 3000);
 }
 
-// Delete image action
+// Delete actions
 function deleteReceipt(id) {
   if (appState.firebaseConnected && dbRef) {
     dbRef.child('receipts').child(id).remove();
@@ -527,7 +821,7 @@ function deleteFolder(id) {
 }
 
 // ============================================================================
-// 6. EVENT BINDINGS & INITIALIZATION
+// 9. EVENT BINDINGS & INITIALIZATION
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function () {
   checkMagicLink();
@@ -542,12 +836,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const file = e.target.files[0];
     if (!file) return;
 
-    const targetWidth =
-      appState.qualityPreference === 'ultralow'
-        ? 360
-        : appState.qualityPreference === 'verylow'
-        ? 480
-        : 640;
+    const targetWidth = appState.qualityPreference === 'ultralow' ? 360 : 640;
 
     try {
       const compressedUrl = await compressImage(file, targetWidth);
@@ -555,7 +844,8 @@ document.addEventListener('DOMContentLoaded', function () {
       appState.previewImageDataUrl = compressedUrl;
 
       document.getElementById('image-preview-filename').textContent = file.name;
-      document.getElementById('image-preview-filesize').textContent = `Compressed ~${Math.round(compressedUrl.length / 1024)} KB`;
+      document.getElementById('image-preview-filesize').textContent =
+        `Compressed ~${Math.round(compressedUrl.length / 1024)} KB`;
       document.getElementById('image-preview-thumbnail').src = compressedUrl;
       document.getElementById('image-preview-thumbnail-container').classList.remove('hidden');
     } catch (err) {
@@ -571,7 +861,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('image-preview-thumbnail-container').classList.add('hidden');
   });
 
-  // Upload Form Submit
+  // Upload Form Submit (Auto-Sorts into Month Folder)
   document.getElementById('upload-form')?.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!appState.previewImageDataUrl) {
@@ -579,20 +869,48 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    const folderName = document.getElementById('upload-folder-select').value;
+    // Auto-Sort Month Folder logic
+    const monthFolder = ensureAutoMonthFolderExists();
+    let selectedFolder = document.getElementById('upload-folder-select').value;
+    if (!selectedFolder) selectedFolder = monthFolder;
+
     const title = document.getElementById('upload-title-input').value.trim() || 'Untitled Receipt';
+    const recId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+    const imageSizeBytes = appState.previewImageDataUrl.length;
 
     const newRecord = {
-      id: 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: recId,
       title: title,
-      folderName: folderName,
+      folderName: selectedFolder,
+      monthFolder: monthFolder, // Dynamic "August 2026" folder tag
       imageUrl: appState.previewImageDataUrl,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      sizeBytes: imageSizeBytes
     };
 
-    if (appState.firebaseConnected && dbRef) {
+    // Firebase Storage upload if storageRef is configured
+    if (appState.firebaseConnected && storageRef && appState.previewImageFile) {
+      try {
+        const fileRef = storageRef.child(`receipts/${monthFolder}/${recId}_${appState.previewImageFile.name}`);
+        fileRef.putString(appState.previewImageDataUrl, 'data_url').then((snapshot) => {
+          snapshot.ref.getDownloadURL().then((downloadURL) => {
+            newRecord.imageUrl = downloadURL;
+            if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+          });
+        }).catch((err) => {
+          console.warn('Storage upload fallback to base64 DB record:', err);
+          if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+        });
+      } catch (err) {
+        if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+      }
+    } else if (appState.firebaseConnected && dbRef) {
       dbRef.child('receipts').child(newRecord.id).set(newRecord);
     }
+
+    // Storage Tracker Increment
+    appState.totalAccumulatedBytes += imageSizeBytes;
 
     appState.receipts.unshift(newRecord);
     saveLocalData();
@@ -604,7 +922,7 @@ document.addEventListener('DOMContentLoaded', function () {
     appState.previewImageDataUrl = null;
     document.getElementById('image-preview-thumbnail-container').classList.add('hidden');
 
-    showToast('Receipt uploaded successfully!', 'success');
+    showToast(`Receipt auto-sorted to "${selectedFolder}"!`, 'success');
   });
 
   // Folder creation
@@ -647,8 +965,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // Modal actions
+  // Modal actions & Zoom
   document.getElementById('btn-close-modal')?.addEventListener('click', closeModal);
+  document.getElementById('btn-zoom-in')?.addEventListener('click', zoomInModal);
+  document.getElementById('btn-zoom-out')?.addEventListener('click', zoomOutModal);
+  document.getElementById('btn-zoom-reset')?.addEventListener('click', resetZoomModal);
+
   document.getElementById('btn-delete-modal-image')?.addEventListener('click', function () {
     if (appState.selectedModalReceipt) {
       deleteReceipt(appState.selectedModalReceipt.id);
@@ -710,17 +1032,22 @@ document.addEventListener('DOMContentLoaded', function () {
     showToast('Credentials cleared', 'info');
   });
 
-  // Quality preference buttons
-  ['ultralow', 'verylow', 'low'].forEach((q) => {
-    document.getElementById('quality-' + q)?.addEventListener('click', function () {
-      appState.qualityPreference = q;
-      document.getElementById('home-quality-badge').textContent =
-        q === 'ultralow' ? '360px (~15KB)' : q === 'verylow' ? '480px (~30KB)' : '640px (~50KB)';
-      showToast(`Upload quality set to ${q.toUpperCase()}`, 'success');
-    });
+  // Quality preference buttons (strictly Ultra-Low vs Low)
+  document.getElementById('quality-ultralow')?.addEventListener('click', function () {
+    appState.qualityPreference = 'ultralow';
+    saveLocalData();
+    renderQualityUI();
+    showToast('Upload quality set to ULTRA-LOW (360px)', 'success');
   });
 
-  // Server Storage Calculator
+  document.getElementById('quality-low')?.addEventListener('click', function () {
+    appState.qualityPreference = 'low';
+    saveLocalData();
+    renderQualityUI();
+    showToast('Upload quality set to LOW (640px)', 'success');
+  });
+
+  // Storage Tracker Calculator & Reset
   document.getElementById('btn-calculate-storage')?.addEventListener('click', function () {
     const calcBox = document.getElementById('storage-calc-result');
     calcBox.classList.remove('hidden');
@@ -729,10 +1056,16 @@ document.addEventListener('DOMContentLoaded', function () {
       (acc, r) => acc + (r.imageUrl ? r.imageUrl.length : 0),
       0
     );
-    let formatted = (totalBytes / 1024).toFixed(1) + ' KB';
 
-    document.getElementById('calc-total-size').textContent = formatted;
-    document.getElementById('calc-file-count').textContent = appState.receipts.length + ' files';
-    showToast('Storage calculation complete', 'success');
+    document.getElementById('calc-total-size').textContent = formatByteSize(totalBytes);
+    document.getElementById('calc-file-count').textContent = appState.receipts.length + ' receipts';
+    showToast('Active storage calculation complete', 'success');
+  });
+
+  document.getElementById('btn-reset-tracker')?.addEventListener('click', function () {
+    appState.totalAccumulatedBytes = 0;
+    saveLocalData();
+    renderStorageTrackerUI();
+    showToast('Accumulated storage tracker reset', 'info');
   });
 });

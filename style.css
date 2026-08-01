@@ -56,3 +56,43 @@ button, input, select, textarea {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* Accordion Smooth Transitions */
+.accordion-content {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-chevron {
+  transition: transform 0.2s ease-in-out;
+}
+
+.accordion-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Hardware-accelerated GPU zoom container to prevent black-screen crashes on iOS/Android */
+.zoom-wrapper {
+  width: 100%;
+  max-height: 65vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #020617;
+  border-radius: 0.75rem;
+  position: relative;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+.zoom-safe-image {
+  max-width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: transform 0.15s ease-out;
+}

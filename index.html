@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Receipt & Document Organizer</title>
 
-  <!-- 1. INJECT MOBILE DEVTOOLS (ERUDA) -->
+  <!-- Mobile DevTools (Eruda) -->
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
 
-  <!-- Tailwind CSS CDN for Vanilla HTML execution -->
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Firebase JS Compat SDKs (CDN) -->
@@ -54,17 +54,17 @@
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-sm font-bold text-slate-100">Capture / Upload Receipt</h2>
-            <p class="text-xs text-slate-400 mt-0.5">Snap a photo or select an image file to save</p>
+            <p class="text-xs text-slate-400 mt-0.5">Snap a photo or select an image to auto-sort into Month folder</p>
           </div>
           <span id="home-quality-badge" class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-            360px (~15KB)
+            Ultra-Low (360px ~15KB)
           </span>
         </div>
 
         <form id="upload-form" class="space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Select Folder *</label>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Target Folder (Auto-Month default)</label>
               <select id="upload-folder-select" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
                 <!-- Dynamically populated -->
               </select>
@@ -173,93 +173,193 @@
     </section>
 
 
-    <!-- TAB 5: SETTINGS -->
-    <section id="tab-settings" class="hidden space-y-4">
-      <!-- 1. Single Box JSON Config -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-bold text-slate-100">Single Box JSON Config</h2>
-          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Fast Setup</span>
+    <!-- TAB 5: SETTINGS (EXCLUSIVE ACCORDION PANEL) -->
+    <section id="tab-settings" class="hidden space-y-3">
+      <div class="flex items-center justify-between pb-1">
+        <div>
+          <h2 class="text-sm font-bold text-slate-100">Application Settings</h2>
+          <p class="text-[11px] text-slate-400">Mutually exclusive settings accordion (one panel open at a time)</p>
         </div>
-        <p class="text-xs text-slate-400">Paste your Firebase config object or JS snippet directly below.</p>
-        <textarea id="json-config-textarea" rows="4" placeholder='{\n  "apiKey": "AIzaSy...",\n  "databaseURL": "https://my-app.firebaseio.com",\n  "projectId": "my-app"\n}' class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500 resize-none placeholder:text-slate-700"></textarea>
-
-        <div class="flex flex-col sm:flex-row gap-2.5">
-          <button type="button" id="btn-parse-json-config" class="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
-            Parse & Save JSON
-          </button>
-          <button type="button" id="btn-share-magic-link" class="py-2.5 px-4 bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
-            Share Magic Link
-          </button>
-        </div>
+        <button type="button" onclick="closeAllAccordions()" class="text-[10px] text-slate-400 hover:text-emerald-400 underline">Close All</button>
       </div>
 
-      <!-- 2. Individual Fields -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-        <h2 class="text-sm font-bold text-slate-100">Individual Project Fields</h2>
-        
-        <form id="individual-config-form" class="space-y-3">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">API Key *</label>
-              <input type="text" id="field-api-key" placeholder="AIzaSy..." required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+      <!-- ACCORDION SECTION 1: Single Box Firebase JSON Config -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
+        <button type="button" onclick="toggleAccordion('json-config')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
             </div>
             <div>
-              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Realtime DB URL *</label>
-              <input type="text" id="field-db-url" placeholder="https://your-project.firebaseio.com" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
-            </div>
-            <div>
-              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Project ID *</label>
-              <input type="text" id="field-project-id" placeholder="my-app-id" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
-            </div>
-            <div>
-              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Storage Bucket</label>
-              <input type="text" id="field-storage-bucket" placeholder="my-app-id.appspot.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+              <h3 class="text-xs font-bold text-slate-100">Single Box Firebase JSON Config</h3>
+              <p class="text-[10px] text-slate-400">Paste raw Firebase config JSON or JS object</p>
             </div>
           </div>
-
-          <div class="flex items-center justify-between pt-2 border-t border-slate-800">
-            <button type="button" id="btn-clear-credentials" class="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 text-red-400 font-bold text-xs rounded-lg border border-slate-800 transition cursor-pointer">
-              Clear Credentials
-            </button>
-            <button type="submit" class="py-2.5 px-5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer">
-              Update Config
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <!-- 3. Server Storage Calculator -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-        <h2 class="text-sm font-bold text-slate-100">Server Storage Calculator</h2>
-        <p class="text-xs text-slate-400">Calculate actual storage space used in Firebase Storage or local cache.</p>
-
-        <button type="button" id="btn-calculate-storage" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
-          Calculate Server Storage
+          <svg id="chevron-json-config" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
         </button>
 
-        <div id="storage-calc-result" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-xs font-mono">
-          <div class="flex justify-between"><span class="text-slate-400">Total Size:</span><span id="calc-total-size" class="text-emerald-400 font-bold"></span></div>
-          <div class="flex justify-between"><span class="text-slate-400">Files Count:</span><span id="calc-file-count" class="text-slate-200"></span></div>
+        <div id="accordion-json-config" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
+          <p class="text-xs text-slate-400 mt-2">Paste your Firebase configuration object or JS snippet directly below.</p>
+          <textarea id="json-config-textarea" rows="4" placeholder='{\n  "apiKey": "AIzaSy...",\n  "databaseURL": "https://my-app.firebaseio.com",\n  "projectId": "my-app",\n  "storageBucket": "my-app.appspot.com"\n}' class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500 resize-none placeholder:text-slate-700"></textarea>
+
+          <div class="flex flex-col sm:flex-row gap-2.5">
+            <button type="button" id="btn-parse-json-config" class="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+              Parse & Save Config
+            </button>
+            <button type="button" id="btn-share-magic-link" class="py-2.5 px-4 bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+              Share Magic Link
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 4. Global Upload Quality -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-        <h2 class="text-sm font-bold text-slate-100">Upload Quality & Speed</h2>
-        <div class="grid grid-cols-3 gap-2">
-          <button type="button" id="quality-ultralow" class="p-2.5 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 text-center cursor-pointer">
-            <div class="text-[11px] font-bold uppercase">Ultra-Low</div>
-            <div class="text-[9px] opacity-80">360px (~15KB)</div>
-          </button>
-          <button type="button" id="quality-verylow" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer">
-            <div class="text-[11px] font-bold uppercase">Very Low</div>
-            <div class="text-[9px] opacity-80">480px (~30KB)</div>
-          </button>
-          <button type="button" id="quality-low" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer">
-            <div class="text-[11px] font-bold uppercase">Low</div>
-            <div class="text-[9px] opacity-80">640px (~50KB)</div>
-          </button>
+      <!-- ACCORDION SECTION 2: Individual Project Fields -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
+        <button type="button" onclick="toggleAccordion('individual-fields')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-blue-500/10 text-blue-400 rounded-xl">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-xs font-bold text-slate-100">Individual Field Credentials</h3>
+              <p class="text-[10px] text-slate-400">Manually edit API Key, DB URL, and Project ID</p>
+            </div>
+          </div>
+          <svg id="chevron-individual-fields" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+
+        <div id="accordion-individual-fields" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
+          <form id="individual-config-form" class="space-y-3 mt-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">API Key *</label>
+                <input type="text" id="field-api-key" placeholder="AIzaSy..." required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Realtime DB URL *</label>
+                <input type="text" id="field-db-url" placeholder="https://your-project.firebaseio.com" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Project ID *</label>
+                <input type="text" id="field-project-id" placeholder="my-app-id" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Storage Bucket</label>
+                <input type="text" id="field-storage-bucket" placeholder="my-app-id.appspot.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button type="button" id="btn-clear-credentials" class="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 text-red-400 font-bold text-xs rounded-lg border border-slate-800 transition cursor-pointer">
+                Clear Credentials
+              </button>
+              <button type="submit" class="py-2.5 px-5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+                Update Config
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ACCORDION SECTION 3: Bottom Nav Customizer (Reordering & Visibility) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
+        <button type="button" onclick="toggleAccordion('nav-customizer')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-amber-500/10 text-amber-400 rounded-xl">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-xs font-bold text-slate-100">Bottom Nav Customizer</h3>
+              <p class="text-[10px] text-slate-400">Reorder items (↑/↓) and toggle icon visibility</p>
+            </div>
+          </div>
+          <svg id="chevron-nav-customizer" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+
+        <div id="accordion-nav-customizer" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
+          <div class="flex items-center justify-between pt-2">
+            <span class="text-xs text-slate-400">Reorder or toggle visibility of navigation tabs:</span>
+            <button type="button" onclick="resetNavItems()" class="text-[10px] text-amber-400 hover:underline">Reset Default</button>
+          </div>
+
+          <div id="nav-items-manager-list" class="space-y-2">
+            <!-- Dynamically rendered by script.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION SECTION 4: Upload Quality (Ultra-Low vs Low ONLY) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
+        <button type="button" onclick="toggleAccordion('upload-quality')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-purple-500/10 text-purple-400 rounded-xl">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-xs font-bold text-slate-100">Ultra-Low Compression Settings</h3>
+              <p class="text-[10px] text-slate-400">Strictly Ultra-Low (360px ~15KB) vs Low (640px ~50KB)</p>
+            </div>
+          </div>
+          <svg id="chevron-upload-quality" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+
+        <div id="accordion-upload-quality" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
+          <p class="text-xs text-slate-400 mt-2">To save bandwidth and maximum storage, choose between strict Ultra-Low or Low compression presets:</p>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" id="quality-ultralow" class="p-3 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 text-center cursor-pointer transition">
+              <div class="text-xs font-bold uppercase">Ultra-Low</div>
+              <div class="text-[10px] opacity-80 mt-0.5">360px Max Width (~15KB)</div>
+            </button>
+
+            <button type="button" id="quality-low" class="p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer transition">
+              <div class="text-xs font-bold uppercase">Low</div>
+              <div class="text-[10px] opacity-80 mt-0.5">640px Max Width (~50KB)</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION SECTION 5: Accumulated Storage Tracker & Server Calculator -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
+        <button type="button" onclick="toggleAccordion('storage-tracker')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-xs font-bold text-slate-100">Storage Usage Tracker</h3>
+              <p class="text-[10px] text-slate-400">Total accumulated uploaded MB/KB & Server Calculator</p>
+            </div>
+          </div>
+          <svg id="chevron-storage-tracker" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+
+        <div id="accordion-storage-tracker" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
+          <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs mt-2">
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400 font-medium">Accumulated Uploaded Storage:</span>
+              <span id="tracker-accumulated-value" class="font-bold text-emerald-400 font-mono">0 KB</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400 font-medium">Active Receipts Stored:</span>
+              <span id="tracker-active-count" class="font-bold text-slate-200 font-mono">0 receipts</span>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <button type="button" id="btn-calculate-storage" class="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+              Calculate Active Storage
+            </button>
+            <button type="button" id="btn-reset-tracker" class="px-3 py-2.5 bg-slate-950 hover:bg-slate-800 text-red-400 border border-slate-800 font-bold text-xs rounded-xl transition cursor-pointer">
+              Reset Tracker
+            </button>
+          </div>
+
+          <div id="storage-calc-result" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-xs font-mono">
+            <div class="flex justify-between"><span class="text-slate-400">Active Storage Size:</span><span id="calc-total-size" class="text-emerald-400 font-bold"></span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Total Receipt Records:</span><span id="calc-file-count" class="text-slate-200"></span></div>
+          </div>
         </div>
       </div>
     </section>
@@ -269,22 +369,34 @@
   <!-- Bottom Navigation Bar -->
   <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2">
     <div id="bottom-nav-container" class="max-w-md mx-auto flex items-center justify-around">
-      <!-- Dynamic Nav Items -->
+      <!-- Dynamic Nav Items Rendered by script.js -->
     </div>
   </nav>
 
-  <!-- Image Preview Modal -->
+  <!-- Image Preview Modal (With Hardware Accelerated Zoom Boundaries Fix) -->
   <div id="image-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col items-center justify-center">
     <div class="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-4 space-y-3">
       <div class="flex items-center justify-between">
         <h3 id="modal-image-title" class="text-sm font-bold text-slate-100 truncate"></h3>
-        <button type="button" id="btn-close-modal" class="p-1.5 text-slate-400 hover:text-slate-100">
+        <button type="button" id="btn-close-modal" class="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
 
-      <div class="max-h-[60vh] overflow-hidden rounded-xl bg-slate-950 flex items-center justify-center">
-        <img id="modal-image-element" class="max-h-[60vh] max-w-full object-contain" alt="Receipt full preview" />
+      <!-- Zoom controls bar -->
+      <div class="flex items-center justify-between bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800/80 text-xs">
+        <span class="text-[10px] text-slate-400 font-mono">Hardware Zoom Safe</span>
+        <div class="flex items-center space-x-1.5">
+          <button type="button" id="btn-zoom-out" class="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded font-bold">-</button>
+          <span id="modal-zoom-level" class="text-[10px] font-mono text-emerald-400 min-w-[36px] text-center">100%</span>
+          <button type="button" id="btn-zoom-in" class="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded font-bold">+</button>
+          <button type="button" id="btn-zoom-reset" class="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 text-xs text-slate-400 rounded">Reset</button>
+        </div>
+      </div>
+
+      <!-- Image Zoom Safe Container -->
+      <div class="zoom-wrapper">
+        <img id="modal-image-element" class="zoom-safe-image" alt="Receipt full preview" />
       </div>
 
       <div class="flex items-center justify-between pt-2">
