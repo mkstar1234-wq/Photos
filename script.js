@@ -788,7 +788,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
  * - A custom generated canvas icon Blob URL
  */
 function updateDynamicManifest(folderName, iconDataUrl) {
-  const startUrl = `/?folder=${encodeURIComponent(folderName)}&action=camera`;
+  const startUrl = `/?shortcutFolder=${encodeURIComponent(folderName)}&action=directCam`;
 
   const dynamicManifestObj = {
     name: `${folderName} - Camera`,
@@ -891,10 +891,10 @@ function closeAddToHomeScreenModal() {
  */
 function checkFolderShortcutQuery() {
   const urlParams = new URLSearchParams(window.location.search);
-  const targetFolder = urlParams.get('folder') || urlParams.get('targetFolder');
+  const targetFolder = urlParams.get('shortcutFolder') || urlParams.get('folder') || urlParams.get('targetFolder');
   const action = urlParams.get('action');
 
-  if (targetFolder && (action === 'camera' || action === 'autoCamera')) {
+  if (targetFolder && (action === 'directCam' || action === 'camera' || action === 'autoCamera')) {
     activateFullscreenCameraView(targetFolder);
   } else if (targetFolder) {
     // Normal folder view fallback
@@ -1710,9 +1710,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const link =
       window.location.origin +
       window.location.pathname +
-      '?folder=' +
+      '?shortcutFolder=' +
       encodeURIComponent(currentAthFolder) +
-      '&action=camera';
+      '&action=directCam';
     navigator.clipboard.writeText(link);
     showToast(`Deep Link Camera Shortcut copied for "${currentAthFolder}"!`, 'success');
   });
