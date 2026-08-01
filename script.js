@@ -68,6 +68,11 @@ function setErudaVisibility(visible) {
   }
 
   window.onerror = function (msg, source, lineno, colno, error) {
+    var errorString = String(msg || '');
+    if (errorString === 'Script error.' || errorString === 'Script error') {
+      console.warn('Cross-origin Script error suppressed:', msg);
+      return true;
+    }
     var stack = error && error.stack ? error.stack : '';
     showErrorOverlay('JavaScript Error', msg, source, lineno, colno, stack);
     setErudaVisibility(true);
@@ -80,6 +85,10 @@ function setErudaVisibility(visible) {
   window.addEventListener('unhandledrejection', function (event) {
     var reason = event.reason;
     var msg = reason ? reason.message || String(reason) : 'Unhandled Promise Rejection';
+    if (msg === 'Script error.' || msg === 'Script error') {
+      console.warn('Cross-origin Script error in promise rejection suppressed:', msg);
+      return;
+    }
     var stack = reason && reason.stack ? reason.stack : '';
     showErrorOverlay('Unhandled Rejection', msg, '', '', '', stack);
     setErudaVisibility(true);
@@ -780,8 +789,9 @@ function openAddToHomeScreenModal(folderName) {
   const folderNameEl = document.getElementById('ath-folder-name');
   if (folderNameEl) folderNameEl.textContent = folderName;
 
-  const targetUrl = new URL(window.location.href);
-  targetUrl.searchParams.set('folder', folderName);
+  const targetUrl = new URL(window.location.origin + window.location.pathname);
+  targetUrl.searchParams.set('targetFolder', folderName);
+  targetUrl.searchParams.set('action', 'autoCamera');
 
   const urlPreviewEl = document.getElementById('ath-folder-url-preview');
   if (urlPreviewEl) urlPreviewEl.textContent = targetUrl.search;
@@ -815,19 +825,39 @@ function closeAddToHomeScreenModal() {
 
 function checkFolderShortcutQuery() {
   const urlParams = new URLSearchParams(window.location.search);
-  const targetFolder = urlParams.get('folder');
+  const targetFolder = urlParams.get('targetFolder') || urlParams.get('folder');
+  const action = urlParams.get('action');
+
   if (targetFolder) {
-    switchTab('folders');
-    showToast(`Shortcut loaded for "${targetFolder}"`, 'info');
-    setTimeout(() => {
-      const folderCards = document.querySelectorAll('#folders-management-list > div');
-      folderCards.forEach((card) => {
-        if (card.textContent && card.textContent.includes(targetFolder)) {
-          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          card.classList.add('ring-2', 'ring-emerald-400');
-        }
-      });
-    }, 250);
+    if (action === 'autoCamera') {
+      // 2. STARTUP INTERCEPT (BYPASS UI)
+      switchTab('folders');
+      activeUploadFolder = targetFolder;
+
+      // Clean up URL parameters immediately so browser reload won't re-trigger loop
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      showToast(`Deep Link: Triggering camera for "${targetFolder}"...`, 'info');
+
+      // 3. INSTANT CAMERA TRIGGER
+      setTimeout(() => {
+        triggerFolderCameraUpload(targetFolder);
+      }, 200);
+    } else {
+      // Fallback: If shortcut opened without autoCamera action parameter
+      switchTab('folders');
+      showToast(`Folder shortcut loaded: "${targetFolder}"`, 'info');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => {
+        const folderCards = document.querySelectorAll('#folders-management-list > div');
+        folderCards.forEach((card) => {
+          if (card.textContent && card.textContent.includes(targetFolder)) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('ring-2', 'ring-emerald-400');
+          }
+        });
+      }, 250);
+    }
   }
 }
 
@@ -1222,6 +1252,25 @@ function deleteReceipt(id) {
   showToast('Receipt deleted successfully', 'success');
 }
 
+async function listAllFilesRecursively(ref) {
+  let files = [];
+  try {
+    const res = await ref.listAll();
+    if (res.items) {
+      files = files.concat(res.items);
+    }
+    if (res.prefixes) {
+      for (const prefixRef of res.prefixes) {
+        const subFiles = await listAllFilesRecursively(prefixRef);
+        files = files.concat(subFiles);
+      }
+    }
+  } catch (err) {
+    console.warn('listAllFilesRecursively error:', err);
+  }
+  return files;
+}
+
 async function deleteFolder(id) {
   const folderObj = appState.folders.find((f) => f.id === id);
   if (!folderObj) return;
@@ -1548,9 +1597,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
   document.getElementById('btn-copy-folder-shortcut')?.addEventListener('click', function () {
     if (!currentAthFolder) return;
-    const link = window.location.origin + window.location.pathname + '?folder=' + encodeURIComponent(currentAthFolder);
+    const link =
+      window.location.origin +
+      window.location.pathname +
+      '?targetFolder=' +
+      encodeURIComponent(currentAthFolder) +
+      '&action=autoCamera';
     navigator.clipboard.writeText(link);
-    showToast(`Shortcut link copied for "${currentAthFolder}"!`, 'success');
+    showToast(`Deep Link Camera Shortcut copied for "${currentAthFolder}"!`, 'success');
   });
 
   document.getElementById('btn-download-folder-icon')?.addEventListener('click', function () {
