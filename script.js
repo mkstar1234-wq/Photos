@@ -82,14 +82,13 @@ const DEFAULT_NAV_ITEMS = [
 ];
 
 let appState = {
-  activeTab: 'home',
+  activeTab: 'folders',
   folders: [],
   receipts: [],
   navItems: DEFAULT_NAV_ITEMS,
   firebaseConnected: false,
   qualityPreference: 'ultralow', // strictly 'ultralow' (360px) or 'low' (640px)
   layoutPreference: 'grid', // 'grid' or 'list'
-  totalAccumulatedBytes: 0,
   openAccordionId: null, // Exclusive accordion: null means all closed
   previewImageFile: null,
   previewImageDataUrl: null,
@@ -274,17 +273,19 @@ function loadLocalData() {
     appState.receipts = rawR ? JSON.parse(rawR) : [];
 
     const rawNav = localStorage.getItem('app_nav_config');
-    appState.navItems = rawNav ? JSON.parse(rawNav) : DEFAULT_NAV_ITEMS;
-
-    const rawBytes = localStorage.getItem('app_accumulated_bytes');
-    appState.totalAccumulatedBytes = rawBytes ? parseInt(rawBytes, 10) : 0;
+    const loadedNav = rawNav ? JSON.parse(rawNav) : DEFAULT_NAV_ITEMS;
+    appState.navItems = loadedNav.filter(
+      (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+    );
 
     const savedQuality = localStorage.getItem('app_quality_preference');
     appState.qualityPreference = (savedQuality === 'low') ? 'low' : 'ultralow';
   } catch (e) {
     appState.folders = DEFAULT_FOLDERS;
     appState.receipts = [];
-    appState.navItems = DEFAULT_NAV_ITEMS;
+    appState.navItems = DEFAULT_NAV_ITEMS.filter(
+      (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+    );
   }
 }
 
@@ -293,7 +294,6 @@ function saveLocalData() {
     localStorage.setItem('app_folders', JSON.stringify(appState.folders));
     localStorage.setItem('app_receipts', JSON.stringify(appState.receipts));
     localStorage.setItem('app_nav_config', JSON.stringify(appState.navItems));
-    localStorage.setItem('app_accumulated_bytes', appState.totalAccumulatedBytes.toString());
     localStorage.setItem('app_quality_preference', appState.qualityPreference);
   } catch (e) {}
 }
@@ -400,8 +400,6 @@ function renderAccordionUI() {
 
   if (appState.openAccordionId === 'nav-customizer') {
     renderNavConfigUI();
-  } else if (appState.openAccordionId === 'storage-tracker') {
-    renderStorageTrackerUI();
   }
 }
 
@@ -443,7 +441,9 @@ function toggleNavItemVisibility(id) {
 }
 
 function resetNavItems() {
-  appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS));
+  appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS)).filter(
+    (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+  );
   saveLocalData();
   renderBottomNav();
   renderNavConfigUI();
@@ -494,16 +494,18 @@ function renderNavConfigUI() {
 // 7. RENDERERS & VIEW CONTROLLERS
 // ============================================================================
 function switchTab(tabId) {
-  appState.activeTab = tabId;
+  appState.activeTab = tabId || 'folders';
 
   ['home', 'folders', 'search', 'cleanup', 'settings'].forEach((t) => {
     const el = document.getElementById('tab-' + t);
     if (el) {
-      if (t === tabId) {
+      if (t === appState.activeTab) {
         el.classList.remove('hidden');
+        el.style.display = 'block';
         el.classList.add('animate-fadeIn');
       } else {
         el.classList.add('hidden');
+        el.style.display = 'none';
       }
     }
   });
@@ -516,7 +518,9 @@ function renderBottomNav() {
   const container = document.getElementById('bottom-nav-container');
   if (!container) return;
 
-  const visibleTabs = appState.navItems.filter((item) => item.visible);
+  const visibleTabs = appState.navItems.filter(
+    (item) => item.visible && item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+  );
 
   if (!visibleTabs.length) {
     container.innerHTML = '<span class="text-xs text-slate-500 py-1">No visible navigation tabs</span>';
@@ -543,12 +547,12 @@ function renderAllViews() {
   renderSearchResults();
   renderCleanupView();
   renderQualityUI();
-  renderStorageTrackerUI();
 }
 
 function populateFolderDropdowns() {
   const uploadSelect = document.getElementById('upload-folder-select');
   const searchFilter = document.getElementById('search-folder-filter');
+  const searchMonthFilter = document.getElementById('search-month-filter');
   const currentMonthFolder = getAutoMonthFolderName();
 
   if (uploadSelect) {
@@ -565,9 +569,42 @@ function populateFolderDropdowns() {
   if (searchFilter) {
     const currentVal = searchFilter.value || 'ALL';
     searchFilter.innerHTML =
-      '<option value="ALL">All Folders</option>' +
+      '<option value="ALL">All Categories</option>' +
       appState.folders.map((f) => `<option value="${f.name}">${f.name}</option>`).join('');
     searchFilter.value = currentVal;
+  }
+
+  if (searchMonthFilter) {
+    const currentVal = searchMonthFilter.value || 'ALL';
+
+    const monthsSet = new Set();
+    monthsSet.add(currentMonthFolder);
+
+    appState.receipts.forEach((r) => {
+      if (r.monthFolder) monthsSet.add(r.monthFolder);
+      if (r.timestamp) {
+        const d = new Date(r.timestamp);
+        if (!isNaN(d.getTime())) {
+          const monthName = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+          monthsSet.add(monthName);
+        }
+      }
+    });
+
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthStr = m.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      monthsSet.add(monthStr);
+    }
+
+    const sortedMonths = Array.from(monthsSet);
+
+    searchMonthFilter.innerHTML =
+      '<option value="ALL">All Month Folders</option>' +
+      sortedMonths.map((m) => `<option value="${m}">${m}</option>`).join('');
+
+    searchMonthFilter.value = currentVal;
   }
 }
 
@@ -613,22 +650,270 @@ function renderHomeReceipts() {
     .join('');
 }
 
+let activeUploadFolder = null;
+
+function triggerFolderGalleryUpload(folderName) {
+  activeUploadFolder = folderName;
+  const fileInput = document.getElementById('upload-file-input');
+  if (fileInput) {
+    fileInput.removeAttribute('capture');
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function triggerFolderCameraUpload(folderName) {
+  activeUploadFolder = folderName;
+  const fileInput = document.getElementById('upload-file-input');
+  if (fileInput) {
+    fileInput.setAttribute('capture', 'environment');
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+// Dynamic HTML5 Canvas App Icon Generator for Home Screen Shortcuts
+function generateFolderAppIcon(folderName) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // Dark slate background with rounded corners
+  const grad = ctx.createLinearGradient(0, 0, 192, 192);
+  grad.addColorStop(0, '#0f172a');
+  grad.addColorStop(1, '#020617');
+
+  const radius = 38;
+  ctx.beginPath();
+  ctx.moveTo(radius, 0);
+  ctx.lineTo(192 - radius, 0);
+  ctx.quadraticCurveTo(192, 0, 192, radius);
+  ctx.lineTo(192, 192 - radius);
+  ctx.quadraticCurveTo(192, 192, 192 - radius, 192);
+  ctx.lineTo(radius, 192);
+  ctx.quadraticCurveTo(0, 192, 0, 192 - radius);
+  ctx.lineTo(0, radius);
+  ctx.quadraticCurveTo(0, 0, radius, 0);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Emerald accent border
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#10b981';
+  ctx.stroke();
+
+  // Center badge circle
+  ctx.fillStyle = '#059669';
+  ctx.beginPath();
+  ctx.arc(96, 68, 28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Folder emoji/icon
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📁', 96, 68);
+
+  // Extract Initials
+  let initials = folderName
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+  if (initials.length > 3) initials = initials.substring(0, 3);
+  if (!initials) initials = folderName.substring(0, 3).toUpperCase();
+
+  // Initials Text
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText(initials, 96, 126);
+
+  // Folder Name Subtext
+  ctx.fillStyle = '#34d399';
+  ctx.font = '600 15px sans-serif';
+  let displayName = folderName;
+  if (displayName.length > 14) displayName = displayName.substring(0, 12) + '..';
+  ctx.fillText(displayName, 96, 160);
+
+  return canvas.toDataURL('image/png');
+}
+
+let currentAthFolder = '';
+let currentAthIconUrl = '';
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const pwaBtn = document.getElementById('btn-modal-pwa-install');
+  if (pwaBtn) pwaBtn.classList.remove('hidden');
+});
+
+function openAddToHomeScreenModal(folderName) {
+  currentAthFolder = folderName;
+  const iconDataUrl = generateFolderAppIcon(folderName);
+  currentAthIconUrl = iconDataUrl;
+
+  const previewImg = document.getElementById('ath-preview-icon');
+  if (previewImg) previewImg.src = iconDataUrl;
+
+  const folderNameEl = document.getElementById('ath-folder-name');
+  if (folderNameEl) folderNameEl.textContent = folderName;
+
+  const targetUrl = new URL(window.location.href);
+  targetUrl.searchParams.set('folder', folderName);
+
+  const urlPreviewEl = document.getElementById('ath-folder-url-preview');
+  if (urlPreviewEl) urlPreviewEl.textContent = targetUrl.search;
+
+  // Set dynamic apple-touch-icon in head
+  let appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (!appleIcon) {
+    appleIcon = document.createElement('link');
+    appleIcon.rel = 'apple-touch-icon';
+    document.head.appendChild(appleIcon);
+  }
+  appleIcon.href = iconDataUrl;
+
+  const pwaBtn = document.getElementById('btn-modal-pwa-install');
+  if (pwaBtn) {
+    if (deferredInstallPrompt) {
+      pwaBtn.classList.remove('hidden');
+    } else {
+      pwaBtn.classList.add('hidden');
+    }
+  }
+
+  const modal = document.getElementById('add-to-home-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeAddToHomeScreenModal() {
+  const modal = document.getElementById('add-to-home-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function checkFolderShortcutQuery() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetFolder = urlParams.get('folder');
+  if (targetFolder) {
+    switchTab('folders');
+    showToast(`Shortcut loaded for "${targetFolder}"`, 'info');
+    setTimeout(() => {
+      const folderCards = document.querySelectorAll('#folders-management-list > div');
+      folderCards.forEach((card) => {
+        if (card.textContent && card.textContent.includes(targetFolder)) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('ring-2', 'ring-emerald-400');
+        }
+      });
+    }, 250);
+  }
+}
+
 function renderFoldersManagement() {
   const container = document.getElementById('folders-management-list');
   if (!container) return;
 
-  container.innerHTML = appState.folders
-    .map(
-      (f) => `<div class="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-3 h-3 rounded-full" style="background-color: ${f.color || '#10b981'}"></div>
-        <span class="text-xs font-bold text-slate-200">${f.name}</span>
-      </div>
-      <button type="button" onclick="deleteFolder('${f.id}')" class="p-1.5 text-slate-500 hover:text-red-400 transition cursor-pointer">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-      </button>
-    </div>`
-    )
+  const currentMonthFolder = getAutoMonthFolderName();
+  const folderNamesSet = new Set();
+
+  folderNamesSet.add(currentMonthFolder);
+  appState.folders.forEach((f) => folderNamesSet.add(f.name));
+  appState.receipts.forEach((r) => {
+    if (r.folderName) folderNamesSet.add(r.folderName);
+    if (r.monthFolder) folderNamesSet.add(r.monthFolder);
+  });
+
+  const folderNames = Array.from(folderNamesSet);
+
+  if (!folderNames.length) {
+    container.innerHTML = `<div class="py-8 text-center text-slate-500 text-xs">No folders created yet. Create one above!</div>`;
+    return;
+  }
+
+  container.innerHTML = folderNames
+    .map((fName) => {
+      const folderReceipts = appState.receipts.filter(
+        (r) => r.folderName === fName || r.monthFolder === fName
+      );
+
+      const isCustom = appState.folders.some((f) => f.name === fName);
+      const customFolderObj = appState.folders.find((f) => f.name === fName);
+
+      let itemsGridHtml = '';
+      if (folderReceipts.length === 0) {
+        itemsGridHtml = `<div class="col-span-2 py-4 text-center text-slate-500 text-[11px] bg-slate-950/40 rounded-xl border border-dashed border-slate-800/80">
+          No receipts in ${fName} yet. Tap Gallery or Camera above to add.
+        </div>`;
+      } else {
+        itemsGridHtml = folderReceipts
+          .map(
+            (item) => `<div onclick="openModal('${item.id}')" class="bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 rounded-xl p-2 flex flex-col space-y-1.5 cursor-pointer transition">
+            <div class="h-24 bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center">
+              <img src="${item.imageUrl}" class="w-full h-full object-cover" alt="Receipt" />
+            </div>
+            <div class="min-w-0">
+              <h5 class="text-[11px] font-bold text-slate-200 truncate">${item.title || 'Receipt'}</h5>
+              <p class="text-[9px] text-slate-400 font-mono">${item.timestamp ? new Date(item.timestamp).toLocaleDateString() : ''}</p>
+            </div>
+          </div>`
+          )
+          .join('');
+      }
+
+      const safeFName = fName.replace(/'/g, "\\'");
+
+      return `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md">
+        <!-- Folder Header with Add to Home Button -->
+        <div class="flex items-center justify-between pb-1 border-b border-slate-800/60">
+          <div class="flex items-center space-x-2">
+            <div class="w-2.5 h-2.5 rounded-full ${isCustom ? 'bg-emerald-400' : 'bg-blue-400'} flex-shrink-0"></div>
+            <h3 class="text-xs font-bold text-slate-100 truncate max-w-[120px] sm:max-w-[200px]">${fName}</h3>
+            <span class="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 flex-shrink-0">
+              ${folderReceipts.length} ${folderReceipts.length === 1 ? 'item' : 'items'}
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-1.5 flex-shrink-0">
+            <button type="button" onclick="openAddToHomeScreenModal('${safeFName}')" title="Add Folder to Home Screen" class="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-bold flex items-center space-x-1 transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+              <span>+Home</span>
+            </button>
+            ${
+              isCustom && customFolderObj
+                ? `<button type="button" onclick="deleteFolder('${customFolderObj.id}')" title="Delete Folder" class="p-1.5 text-slate-500 hover:text-red-400 transition cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>`
+                : ''
+            }
+          </div>
+        </div>
+
+        <!-- STRICT and MINIMAL Upload Section: LEFT (Gallery), RIGHT (Camera) -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button type="button" onclick="triggerFolderGalleryUpload('${fName}')" class="p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl flex items-center justify-center space-x-2 text-slate-200 hover:border-blue-500/40 transition cursor-pointer font-bold text-xs shadow-sm">
+            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <span>Gallery</span>
+          </button>
+
+          <button type="button" onclick="triggerFolderCameraUpload('${fName}')" class="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl flex items-center justify-center space-x-2 transition cursor-pointer font-bold text-xs shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span>Camera</span>
+          </button>
+        </div>
+
+        <!-- 2x2 CSS Grid Layout for Folder Items -->
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          ${itemsGridHtml}
+        </div>
+      </div>`;
+    })
     .join('');
 }
 
@@ -636,16 +921,45 @@ function renderSearchResults() {
   const container = document.getElementById('search-results-list');
   if (!container) return;
 
-  const query = (document.getElementById('search-query-input')?.value || '').toLowerCase();
+  const query = (document.getElementById('search-query-input')?.value || '').trim().toLowerCase();
   const folder = document.getElementById('search-folder-filter')?.value || 'ALL';
+  const monthFilter = document.getElementById('search-month-filter')?.value || 'ALL';
+  const dateFromVal = document.getElementById('search-date-from')?.value;
+  const dateToVal = document.getElementById('search-date-to')?.value;
+
+  const fromMs = dateFromVal ? new Date(dateFromVal + 'T00:00:00').getTime() : null;
+  const toMs = dateToVal ? new Date(dateToVal + 'T23:59:59').getTime() : null;
 
   const filtered = appState.receipts.filter((item) => {
+    // Category folder match
     const matchesFolder = folder === 'ALL' || item.folderName === folder;
+
+    // Month-wise direct folder mapping match
+    let itemMonthStr = item.monthFolder;
+    if (!itemMonthStr && item.timestamp) {
+      const d = new Date(item.timestamp);
+      if (!isNaN(d.getTime())) {
+        itemMonthStr = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      }
+    }
+    const matchesMonth =
+      monthFilter === 'ALL' ||
+      item.monthFolder === monthFilter ||
+      item.folderName === monthFilter ||
+      itemMonthStr === monthFilter;
+
+    // Keyword query match
     const matchesQuery =
       !query ||
       (item.title && item.title.toLowerCase().includes(query)) ||
-      (item.folderName && item.folderName.toLowerCase().includes(query));
-    return matchesFolder && matchesQuery;
+      (item.folderName && item.folderName.toLowerCase().includes(query)) ||
+      (itemMonthStr && itemMonthStr.toLowerCase().includes(query));
+
+    // Date range match
+    const matchesFromDate = fromMs === null || (item.timestamp && item.timestamp >= fromMs);
+    const matchesToDate = toMs === null || (item.timestamp && item.timestamp <= toMs);
+
+    return matchesFolder && matchesMonth && matchesQuery && matchesFromDate && matchesToDate;
   });
 
   if (!filtered.length) {
@@ -656,17 +970,27 @@ function renderSearchResults() {
 
   container.className = 'grid grid-cols-1 sm:grid-cols-2 gap-3';
   container.innerHTML = filtered
-    .map(
-      (item) => `<div onclick="openModal('${item.id}')" class="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between cursor-pointer hover:border-emerald-500/50 transition">
+    .map((item) => {
+      const displayDate = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '';
+      const monthTag =
+        item.monthFolder ||
+        (item.timestamp
+          ? new Date(item.timestamp).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+          : '');
+      return `<div onclick="openModal('${item.id}')" class="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between cursor-pointer hover:border-emerald-500/50 transition">
       <div class="flex items-center space-x-3 min-w-0">
         <img src="${item.imageUrl}" class="w-12 h-12 object-cover rounded-lg bg-slate-950 flex-shrink-0" alt="Receipt" />
         <div class="min-w-0">
           <h4 class="text-xs font-bold text-slate-200 truncate">${item.title || 'Untitled Receipt'}</h4>
-          <span class="text-[10px] text-emerald-400 font-mono">${item.folderName}</span>
+          <div class="flex items-center space-x-1.5 mt-0.5">
+            <span class="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono">${item.folderName}</span>
+            ${monthTag ? `<span class="text-[10px] text-slate-400 font-mono">${monthTag}</span>` : ''}
+          </div>
+          ${displayDate ? `<p class="text-[10px] text-slate-500 mt-0.5">${displayDate}</p>` : ''}
         </div>
       </div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 }
 
@@ -704,15 +1028,92 @@ function renderQualityUI() {
   }
 }
 
-function renderStorageTrackerUI() {
-  const accumValEl = document.getElementById('tracker-accumulated-value');
-  const activeCountEl = document.getElementById('tracker-active-count');
+// Recursively list all files in Firebase Storage starting from a storage ref
+async function listAllFilesRecursively(dirRef) {
+  let files = [];
+  try {
+    const listResult = await dirRef.listAll();
+    files = files.concat(listResult.items);
 
-  if (accumValEl) {
-    accumValEl.textContent = formatByteSize(appState.totalAccumulatedBytes);
+    for (const prefixRef of listResult.prefixes) {
+      const subFiles = await listAllFilesRecursively(prefixRef);
+      files = files.concat(subFiles);
+    }
+  } catch (err) {
+    console.warn('Error listing files at path:', dirRef.fullPath, err);
   }
-  if (activeCountEl) {
-    activeCountEl.textContent = appState.receipts.length + ' receipts';
+  return files;
+}
+
+// Asynchronously calculate total server storage size via Firebase SDK metadata
+async function calculateFirebaseStorageUsage() {
+  const resultEl = document.getElementById('firebase-storage-result');
+  const fileCountEl = document.getElementById('firebase-storage-file-count');
+  const btn = document.getElementById('btn-calculate-firebase-storage');
+
+  if (!appState.firebaseConnected || !storageRef) {
+    showToast('Firebase Storage is not connected. Please save valid credentials with a storageBucket.', 'error');
+    if (resultEl) resultEl.textContent = 'Firebase Storage Disconnected';
+    if (fileCountEl) fileCountEl.textContent = '0 files';
+    return;
+  }
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+    if (resultEl) resultEl.textContent = 'Scanning server files...';
+    if (fileCountEl) fileCountEl.textContent = 'Calculating...';
+
+    // 1. Recursively list all files on the Firebase server using listAll()
+    const fileRefs = await listAllFilesRecursively(storageRef);
+
+    if (fileRefs.length === 0) {
+      if (resultEl) resultEl.textContent = 'Total Server Size: 0 KB';
+      if (fileCountEl) fileCountEl.textContent = '0 files';
+      showToast('Firebase Storage bucket is empty.', 'info');
+      return;
+    }
+
+    if (resultEl) resultEl.textContent = `Fetching metadata for ${fileRefs.length} file(s)...`;
+
+    // 2. Fetch metadata for every file using getMetadata() to get exact size in bytes
+    const metadataPromises = fileRefs.map((fileRef) =>
+      fileRef.getMetadata().catch((err) => {
+        console.warn('Metadata fetch error for:', fileRef.fullPath, err);
+        return null;
+      })
+    );
+
+    const metadatas = await Promise.all(metadataPromises);
+
+    let totalSizeBytes = 0;
+    let successfulCount = 0;
+
+    for (const meta of metadatas) {
+      if (meta && typeof meta.size === 'number') {
+        totalSizeBytes += meta.size;
+        successfulCount++;
+      }
+    }
+
+    // 3. Display live calculated size directly from server
+    const formattedSize = formatByteSize(totalSizeBytes);
+    if (resultEl) resultEl.textContent = `Total Server Size: ${formattedSize}`;
+    if (fileCountEl) fileCountEl.textContent = `${successfulCount} file(s) on server (${totalSizeBytes.toLocaleString()} bytes)`;
+
+    showToast(`Firebase storage calculated: ${formattedSize}`, 'success');
+  } catch (error) {
+    console.error('Error fetching Firebase Storage usage:', error);
+    showToast('Error listing Firebase storage: ' + (error.message || String(error)), 'error');
+    if (resultEl) resultEl.textContent = 'Error calculating server size';
+    if (fileCountEl) fileCountEl.textContent = 'Error';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
   }
 }
 
@@ -827,102 +1228,93 @@ document.addEventListener('DOMContentLoaded', function () {
   checkMagicLink();
   loadLocalData();
   initFirebase();
-  renderBottomNav();
-  renderAllViews();
+  switchTab('folders');
+  checkFolderShortcutQuery();
 
-  // File Upload Preview Handler
+  // File Upload Direct Handler (Auto-uploads on selecting image from Gallery or Camera)
   const fileInput = document.getElementById('upload-file-input');
   fileInput?.addEventListener('change', async function (e) {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
+
+    const monthFolder = ensureAutoMonthFolderExists();
+    const folderSelect = document.getElementById('upload-folder-select');
+    const selectedFolder = activeUploadFolder || (folderSelect ? folderSelect.value : monthFolder) || monthFolder;
+
+    showToast(`Uploading to "${selectedFolder}"...`, 'info');
 
     const targetWidth = appState.qualityPreference === 'ultralow' ? 360 : 640;
 
     try {
       const compressedUrl = await compressImage(file, targetWidth);
-      appState.previewImageFile = file;
-      appState.previewImageDataUrl = compressedUrl;
+      const recId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const title = `Receipt ${formattedDate}`;
+      const imageSizeBytes = Math.round((compressedUrl.length * 3) / 4);
 
-      document.getElementById('image-preview-filename').textContent = file.name;
-      document.getElementById('image-preview-filesize').textContent =
-        `Compressed ~${Math.round(compressedUrl.length / 1024)} KB`;
-      document.getElementById('image-preview-thumbnail').src = compressedUrl;
-      document.getElementById('image-preview-thumbnail-container').classList.remove('hidden');
-    } catch (err) {
-      showToast('Error processing image file', 'error');
-    }
-  });
+      const newRecord = {
+        id: recId,
+        title: title,
+        folderName: selectedFolder,
+        monthFolder: monthFolder,
+        imageUrl: compressedUrl,
+        timestamp: Date.now(),
+        sizeBytes: imageSizeBytes
+      };
 
-  // Remove preview button
-  document.getElementById('btn-remove-preview-file')?.addEventListener('click', function () {
-    if (fileInput) fileInput.value = '';
-    appState.previewImageFile = null;
-    appState.previewImageDataUrl = null;
-    document.getElementById('image-preview-thumbnail-container').classList.add('hidden');
-  });
-
-  // Upload Form Submit (Auto-Sorts into Month Folder)
-  document.getElementById('upload-form')?.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (!appState.previewImageDataUrl) {
-      showToast('Please select a receipt image file', 'error');
-      return;
-    }
-
-    // Auto-Sort Month Folder logic
-    const monthFolder = ensureAutoMonthFolderExists();
-    let selectedFolder = document.getElementById('upload-folder-select').value;
-    if (!selectedFolder) selectedFolder = monthFolder;
-
-    const title = document.getElementById('upload-title-input').value.trim() || 'Untitled Receipt';
-    const recId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-
-    const imageSizeBytes = appState.previewImageDataUrl.length;
-
-    const newRecord = {
-      id: recId,
-      title: title,
-      folderName: selectedFolder,
-      monthFolder: monthFolder, // Dynamic "August 2026" folder tag
-      imageUrl: appState.previewImageDataUrl,
-      timestamp: Date.now(),
-      sizeBytes: imageSizeBytes
-    };
-
-    // Firebase Storage upload if storageRef is configured
-    if (appState.firebaseConnected && storageRef && appState.previewImageFile) {
-      try {
-        const fileRef = storageRef.child(`receipts/${monthFolder}/${recId}_${appState.previewImageFile.name}`);
-        fileRef.putString(appState.previewImageDataUrl, 'data_url').then((snapshot) => {
-          snapshot.ref.getDownloadURL().then((downloadURL) => {
-            newRecord.imageUrl = downloadURL;
+      // Firebase Storage & Realtime DB sync
+      if (appState.firebaseConnected && storageRef) {
+        try {
+          const fileRef = storageRef.child(`receipts/${monthFolder}/${recId}_${file.name}`);
+          fileRef.putString(compressedUrl, 'data_url').then((snapshot) => {
+            snapshot.ref.getDownloadURL().then((downloadURL) => {
+              newRecord.imageUrl = downloadURL;
+              if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+            });
+          }).catch((err) => {
+            console.warn('Storage upload fallback:', err);
             if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
           });
-        }).catch((err) => {
-          console.warn('Storage upload fallback to base64 DB record:', err);
+        } catch (err) {
           if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
-        });
-      } catch (err) {
-        if (dbRef) dbRef.child('receipts').child(newRecord.id).set(newRecord);
+        }
+      } else if (appState.firebaseConnected && dbRef) {
+        dbRef.child('receipts').child(newRecord.id).set(newRecord);
       }
-    } else if (appState.firebaseConnected && dbRef) {
-      dbRef.child('receipts').child(newRecord.id).set(newRecord);
+
+      appState.receipts.unshift(newRecord);
+      saveLocalData();
+      renderAllViews();
+      showToast(`Receipt uploaded to "${selectedFolder}"!`, 'success');
+    } catch (err) {
+      console.error('Error uploading receipt:', err);
+      showToast('Error processing image', 'error');
+    } finally {
+      activeUploadFolder = null;
+      if (fileInput) fileInput.value = '';
     }
+  });
 
-    // Storage Tracker Increment
-    appState.totalAccumulatedBytes += imageSizeBytes;
+  // Home Quick Gallery & Camera buttons
+  document.getElementById('btn-quick-gallery')?.addEventListener('click', function () {
+    activeUploadFolder = null;
+    const input = document.getElementById('upload-file-input');
+    if (input) {
+      input.removeAttribute('capture');
+      input.value = '';
+      input.click();
+    }
+  });
 
-    appState.receipts.unshift(newRecord);
-    saveLocalData();
-    renderAllViews();
-
-    // Reset form
-    e.target.reset();
-    appState.previewImageFile = null;
-    appState.previewImageDataUrl = null;
-    document.getElementById('image-preview-thumbnail-container').classList.add('hidden');
-
-    showToast(`Receipt auto-sorted to "${selectedFolder}"!`, 'success');
+  document.getElementById('btn-quick-camera')?.addEventListener('click', function () {
+    activeUploadFolder = null;
+    const input = document.getElementById('upload-file-input');
+    if (input) {
+      input.setAttribute('capture', 'environment');
+      input.value = '';
+      input.click();
+    }
   });
 
   // Folder creation
@@ -948,9 +1340,52 @@ document.addEventListener('DOMContentLoaded', function () {
     showToast(`Folder "${name}" created!`, 'success');
   });
 
+  // Quick Camera photo upload button
+  document.getElementById('btn-quick-camera')?.addEventListener('click', function () {
+    const fileInput = document.getElementById('upload-file-input');
+    if (fileInput) {
+      fileInput.setAttribute('capture', 'environment');
+      fileInput.setAttribute('accept', 'image/*');
+      fileInput.click();
+    }
+  });
+
+  // Quick Gallery pick upload button
+  document.getElementById('btn-quick-gallery')?.addEventListener('click', function () {
+    const fileInput = document.getElementById('upload-file-input');
+    if (fileInput) {
+      fileInput.removeAttribute('capture');
+      fileInput.setAttribute('accept', 'image/*');
+      fileInput.click();
+    }
+  });
+
   // Search input & filter event listeners
   document.getElementById('search-query-input')?.addEventListener('input', renderSearchResults);
   document.getElementById('search-folder-filter')?.addEventListener('change', renderSearchResults);
+  document.getElementById('search-month-filter')?.addEventListener('change', renderSearchResults);
+  document.getElementById('search-date-from')?.addEventListener('change', renderSearchResults);
+  document.getElementById('search-date-to')?.addEventListener('change', renderSearchResults);
+  document.getElementById('search-date-from')?.addEventListener('input', renderSearchResults);
+  document.getElementById('search-date-to')?.addEventListener('input', renderSearchResults);
+
+  // Clear / Reset search filters
+  document.getElementById('btn-clear-search-filters')?.addEventListener('click', function () {
+    const qInput = document.getElementById('search-query-input');
+    const fFilter = document.getElementById('search-folder-filter');
+    const mFilter = document.getElementById('search-month-filter');
+    const dFrom = document.getElementById('search-date-from');
+    const dTo = document.getElementById('search-date-to');
+
+    if (qInput) qInput.value = '';
+    if (fFilter) fFilter.value = 'ALL';
+    if (mFilter) mFilter.value = 'ALL';
+    if (dFrom) dFrom.value = '';
+    if (dTo) dTo.value = '';
+
+    renderSearchResults();
+    showToast('Search filters reset', 'info');
+  });
 
   // Bulk Delete
   document.getElementById('btn-bulk-delete-all')?.addEventListener('click', function () {
@@ -1047,25 +1482,39 @@ document.addEventListener('DOMContentLoaded', function () {
     showToast('Upload quality set to LOW (640px)', 'success');
   });
 
-  // Storage Tracker Calculator & Reset
-  document.getElementById('btn-calculate-storage')?.addEventListener('click', function () {
-    const calcBox = document.getElementById('storage-calc-result');
-    calcBox.classList.remove('hidden');
+  // Calculate Firebase Storage usage directly from server
+  document.getElementById('btn-calculate-firebase-storage')?.addEventListener('click', calculateFirebaseStorageUsage);
 
-    let totalBytes = appState.receipts.reduce(
-      (acc, r) => acc + (r.imageUrl ? r.imageUrl.length : 0),
-      0
-    );
+  // Add to Home Screen Modal listeners
+  document.getElementById('btn-close-ath-modal')?.addEventListener('click', closeAddToHomeScreenModal);
 
-    document.getElementById('calc-total-size').textContent = formatByteSize(totalBytes);
-    document.getElementById('calc-file-count').textContent = appState.receipts.length + ' receipts';
-    showToast('Active storage calculation complete', 'success');
+  document.getElementById('btn-copy-folder-shortcut')?.addEventListener('click', function () {
+    if (!currentAthFolder) return;
+    const link = window.location.origin + window.location.pathname + '?folder=' + encodeURIComponent(currentAthFolder);
+    navigator.clipboard.writeText(link);
+    showToast(`Shortcut link copied for "${currentAthFolder}"!`, 'success');
   });
 
-  document.getElementById('btn-reset-tracker')?.addEventListener('click', function () {
-    appState.totalAccumulatedBytes = 0;
-    saveLocalData();
-    renderStorageTrackerUI();
-    showToast('Accumulated storage tracker reset', 'info');
+  document.getElementById('btn-download-folder-icon')?.addEventListener('click', function () {
+    if (!currentAthIconUrl) return;
+    const a = document.createElement('a');
+    a.href = currentAthIconUrl;
+    a.download = `${currentAthFolder.replace(/[^a-zA-Z0-9]/g, '_')}_icon.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Folder launcher icon downloaded!', 'success');
+  });
+
+  document.getElementById('btn-modal-pwa-install')?.addEventListener('click', async function () {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('App shortcut pinned to Home Screen!', 'success');
+      }
+      deferredInstallPrompt = null;
+      document.getElementById('btn-modal-pwa-install')?.classList.add('hidden');
+    }
   });
 });

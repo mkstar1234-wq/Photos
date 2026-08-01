@@ -19,6 +19,13 @@
 
   <!-- Relative CSS stylesheet -->
   <link rel="stylesheet" href="./style.css" />
+
+  <!-- PWA Web Manifest & Mobile Web App Meta -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Receipt Organizer" />
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950 min-h-screen flex flex-col">
 
@@ -48,7 +55,7 @@
   <main class="flex-1 max-w-4xl w-full mx-auto px-4 pt-4 pb-28">
 
     <!-- TAB 1: HOME -->
-    <section id="tab-home" class="space-y-4">
+    <section id="tab-home" class="hidden space-y-4">
       <!-- Upload & Capture Card -->
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
         <div class="flex items-center justify-between">
@@ -61,42 +68,27 @@
           </span>
         </div>
 
-        <form id="upload-form" class="space-y-3">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Target Folder (Auto-Month default)</label>
-              <select id="upload-folder-select" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
-                <!-- Dynamically populated -->
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Receipt Title / Vendor</label>
-              <input type="text" id="upload-title-input" placeholder="e.g. Target, Starbucks, Electric Bill" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Receipt Image File *</label>
-            <input type="file" id="upload-file-input" accept="image/*" capture="environment" required class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 cursor-pointer" />
-          </div>
-
-          <div id="image-preview-thumbnail-container" class="hidden relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 flex items-center space-x-3">
-            <img id="image-preview-thumbnail" class="w-12 h-12 object-cover rounded-lg" alt="Preview" />
-            <div class="flex-1 min-w-0">
-              <p id="image-preview-filename" class="text-xs font-semibold text-slate-200 truncate"></p>
-              <p id="image-preview-filesize" class="text-[10px] text-emerald-400 font-mono"></p>
-            </div>
-            <button type="button" id="btn-remove-preview-file" class="p-1.5 text-slate-500 hover:text-red-400 rounded-lg">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-          </div>
-
-          <button type="submit" id="btn-submit-upload" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10 cursor-pointer">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-            <span>Upload Receipt Image</span>
+        <!-- Quick Upload Action Buttons: Gallery (LEFT) & Camera (RIGHT) -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button type="button" id="btn-quick-gallery" class="p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition cursor-pointer shadow-sm hover:border-blue-500/40">
+            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <span>Gallery Pick</span>
           </button>
-        </form>
+          <button type="button" id="btn-quick-camera" class="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition cursor-pointer shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span>Camera Photo</span>
+          </button>
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <label class="text-[11px] font-semibold text-slate-400 whitespace-nowrap">Target Folder:</label>
+          <select id="upload-folder-select" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+
+        <!-- Hidden input for file picking -->
+        <input type="file" id="upload-file-input" accept="image/*" class="hidden" />
       </div>
 
       <!-- Recent Receipts Header & Layout Selector -->
@@ -116,7 +108,7 @@
 
 
     <!-- TAB 2: FOLDERS -->
-    <section id="tab-folders" class="hidden space-y-4">
+    <section id="tab-folders" class="space-y-4">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
         <h2 class="text-sm font-bold text-slate-100">Folder Management</h2>
         
@@ -137,15 +129,49 @@
     <!-- TAB 3: SEARCH & MANAGE -->
     <section id="tab-search" class="hidden space-y-4">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-        <h2 class="text-sm font-bold text-slate-100">Search & Filter Receipts</h2>
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-100">Search & Filter Receipts</h2>
+          <button type="button" id="btn-clear-search-filters" class="text-[11px] font-semibold text-emerald-400 hover:underline cursor-pointer">Reset Filters</button>
+        </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <input type="text" id="search-query-input" placeholder="Search title or folder..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
-          
-          <select id="search-folder-filter" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
-            <option value="ALL">All Folders</option>
-            <!-- Rendered dynamically -->
-          </select>
+        <div class="space-y-3">
+          <!-- Text Keyword Search -->
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Keyword Search</label>
+            <input type="text" id="search-query-input" placeholder="Search title, vendor, or folder..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
+          </div>
+
+          <!-- Category Folder & Month-Year Folder Filters -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Category Folder</label>
+              <select id="search-folder-filter" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
+                <option value="ALL">All Categories</option>
+                <!-- Rendered dynamically -->
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Month & Year Folder</label>
+              <select id="search-month-filter" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
+                <option value="ALL">All Month Folders</option>
+                <!-- Rendered dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Date Range Filters -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">From Date</label>
+              <input type="date" id="search-date-from" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">To Date</label>
+              <input type="date" id="search-date-to" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -320,45 +346,40 @@
         </div>
       </div>
 
-      <!-- ACCORDION SECTION 5: Accumulated Storage Tracker & Server Calculator -->
+      <!-- ACCORDION SECTION 5: Firebase Storage Usage Calculator -->
       <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition">
         <button type="button" onclick="toggleAccordion('storage-tracker')" class="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/50 transition cursor-pointer">
           <div class="flex items-center space-x-3">
             <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s-8-1.79-8-4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
             </div>
             <div>
-              <h3 class="text-xs font-bold text-slate-100">Storage Usage Tracker</h3>
-              <p class="text-[10px] text-slate-400">Total accumulated uploaded MB/KB & Server Calculator</p>
+              <h3 class="text-xs font-bold text-slate-100">Firebase Storage Usage</h3>
+              <p class="text-[10px] text-slate-400">Calculate live bucket storage directly from Firebase SDK metadata</p>
             </div>
           </div>
           <svg id="chevron-storage-tracker" class="w-4 h-4 text-slate-400 accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
         </button>
 
         <div id="accordion-storage-tracker" class="hidden p-4 pt-0 border-t border-slate-800/60 space-y-3 accordion-content">
-          <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs mt-2">
-            <div class="flex justify-between items-center">
-              <span class="text-slate-400 font-medium">Accumulated Uploaded Storage:</span>
-              <span id="tracker-accumulated-value" class="font-bold text-emerald-400 font-mono">0 KB</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-400 font-medium">Active Receipts Stored:</span>
-              <span id="tracker-active-count" class="font-bold text-slate-200 font-mono">0 receipts</span>
-            </div>
-          </div>
+          <p class="text-xs text-slate-400 mt-2">Recursively scans all files in your Firebase Storage bucket (including month folders) and calculates live file sizes directly from server metadata.</p>
 
-          <div class="flex gap-2">
-            <button type="button" id="btn-calculate-storage" class="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
-              Calculate Active Storage
-            </button>
-            <button type="button" id="btn-reset-tracker" class="px-3 py-2.5 bg-slate-950 hover:bg-slate-800 text-red-400 border border-slate-800 font-bold text-xs rounded-xl transition cursor-pointer">
-              Reset Tracker
+          <div>
+            <button type="button" id="btn-calculate-firebase-storage" class="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center justify-center space-x-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              <span>Calculate Firebase Storage</span>
             </button>
           </div>
 
-          <div id="storage-calc-result" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-xs font-mono">
-            <div class="flex justify-between"><span class="text-slate-400">Active Storage Size:</span><span id="calc-total-size" class="text-emerald-400 font-bold"></span></div>
-            <div class="flex justify-between"><span class="text-slate-400">Total Receipt Records:</span><span id="calc-file-count" class="text-slate-200"></span></div>
+          <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-xs font-mono">
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400">Total Server Size:</span>
+              <span id="firebase-storage-result" class="text-emerald-400 font-bold">Click button to calculate</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400">Total Files on Server:</span>
+              <span id="firebase-storage-file-count" class="text-slate-200">-</span>
+            </div>
           </div>
         </div>
       </div>
@@ -366,8 +387,8 @@
 
   </main>
 
-  <!-- Bottom Navigation Bar -->
-  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2">
+  <!-- Bottom Navigation Bar (Always Locked Fixed at Bottom) -->
+  <nav style="position: fixed; bottom: 0; left: 0; width: 100%; z-index: 1000;" class="fixed bottom-0 left-0 right-0 w-full z-[1000] bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2">
     <div id="bottom-nav-container" class="max-w-md mx-auto flex items-center justify-around">
       <!-- Dynamic Nav Items Rendered by script.js -->
     </div>
@@ -403,6 +424,66 @@
         <span id="modal-image-date" class="text-xs text-slate-400 font-mono"></span>
         <button type="button" id="btn-delete-modal-image" class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-xs font-bold uppercase transition cursor-pointer">
           Delete Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add to Home Screen Modal -->
+  <div id="add-to-home-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex items-center justify-center">
+    <div class="relative max-w-sm w-full bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+          </div>
+          <h3 class="text-xs font-bold text-slate-100">Add Folder Shortcut to Home</h3>
+        </div>
+        <button type="button" id="btn-close-ath-modal" class="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Generated Icon & Folder Title -->
+      <div class="flex items-center space-x-4 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+        <img id="ath-preview-icon" class="w-16 h-16 rounded-2xl shadow-md border border-emerald-500/30 object-cover flex-shrink-0" alt="Folder Launcher Icon" />
+        <div class="min-w-0 flex-1">
+          <h4 id="ath-folder-name" class="text-sm font-bold text-slate-100 truncate">Folder Name</h4>
+          <p class="text-[10px] text-emerald-400 font-mono mt-0.5">Dynamic Canvas Icon</p>
+          <p class="text-[10px] text-slate-400 truncate mt-1" id="ath-folder-url-preview"></p>
+        </div>
+      </div>
+
+      <!-- Native PWA Trigger Button if available -->
+      <button type="button" id="btn-modal-pwa-install" class="hidden w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        <span>Pin Shortcut / Install App</span>
+      </button>
+
+      <!-- Step-by-step mobile instructions -->
+      <div class="space-y-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 text-xs">
+        <h5 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Mobile Shortcut Steps</h5>
+        <div class="space-y-1.5 text-[11px] text-slate-400">
+          <p class="flex items-start space-x-1.5">
+            <span class="text-emerald-400 font-bold">•</span>
+            <span><strong>iOS Safari:</strong> Tap Share <svg class="w-3.5 h-3.5 inline text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>, then tap <strong>"Add to Home Screen"</strong>.</span>
+          </p>
+          <p class="flex items-start space-x-1.5">
+            <span class="text-emerald-400 font-bold">•</span>
+            <span><strong>Android Chrome:</strong> Tap Menu (<strong>⋮</strong>), then select <strong>"Add to Home screen"</strong>.</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" id="btn-copy-folder-shortcut" class="py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 flex items-center justify-center space-x-1.5 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <span>Copy Link</span>
+        </button>
+        <button type="button" id="btn-download-folder-icon" class="py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 flex items-center justify-center space-x-1.5 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+          <span>Download Icon</span>
         </button>
       </div>
     </div>
