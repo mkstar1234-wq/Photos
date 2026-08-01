@@ -1,63 +1,305 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-    <!-- Eruda Mobile DevTools -->
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-    <script>eruda.init();</script>
-    <!-- On-Screen Error Handler -->
-    <script>
-      (function() {
-        function showErrorOverlay(title, msg, source, lineno, colno, stack) {
-          function render() {
-            var container = document.getElementById('mobile-debug-error-overlay');
-            if (!container) {
-              container = document.createElement('div');
-              container.id = 'mobile-debug-error-overlay';
-              container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);color:#ff4d4d;z-index:999999;padding:16px;box-sizing:border-box;overflow:auto;font-family:monospace;font-size:14px;word-break:break-word;';
-              if (document.body) {
-                document.body.appendChild(container);
-              } else {
-                document.addEventListener('DOMContentLoaded', function() {
-                  document.body.appendChild(container);
-                });
-              }
-            }
-            var errorCard = document.createElement('div');
-            errorCard.style.cssText = 'margin-bottom:16px;padding:12px;border:2px solid #ff4d4d;background:#1a0000;border-radius:8px;';
-            errorCard.innerHTML = '<h3 style="margin:0 0 8px 0;font-size:16px;color:#ff6666;">' + (title || 'RUNTIME ERROR') + '</h3>' +
-              '<div style="font-weight:bold;margin-bottom:6px;font-size:15px;color:#ffffff;">' + (msg || 'Unknown Error') + '</div>' +
-              (source ? '<div style="color:#ffb3b3;font-size:12px;margin-bottom:4px;">At: ' + source + (lineno ? ':' + lineno + (colno ? ':' + colno : '') : '') + '</div>' : '') +
-              (stack ? '<pre style="margin:8px 0 0 0;white-space:pre-wrap;font-size:11px;color:#ffcccc;max-height:200px;overflow:auto;">' + stack + '</pre>' : '');
-            container.appendChild(errorCard);
-          }
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', render);
-          } else {
-            render();
-          }
-        }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Receipt & Document Organizer</title>
 
-        window.onerror = function(msg, source, lineno, colno, error) {
-          var stack = error && error.stack ? error.stack : '';
-          showErrorOverlay('JavaScript Error', msg, source, lineno, colno, stack);
-          return false;
-        };
+  <!-- 1. INJECT MOBILE DEVTOOLS (ERUDA) -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
 
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event.reason;
-          var msg = reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection';
-          var stack = reason && reason.stack ? reason.stack : '';
-          showErrorOverlay('Unhandled Rejection', msg, '', '', '', stack);
-        });
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="./src/main.tsx"></script>
-  </body>
+  <!-- Tailwind CSS CDN for Vanilla HTML execution -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Firebase JS Compat SDKs (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+
+  <!-- Relative CSS stylesheet -->
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+    <div class="max-w-4xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold text-slate-100 tracking-wide">Receipt Organizer</h1>
+          <p class="text-[10px] text-slate-400 font-mono" id="header-status-subtitle">Checking connection...</p>
+        </div>
+      </div>
+
+      <div id="connection-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/20 flex items-center space-x-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="connection-badge-text">Local Mode</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-4xl w-full mx-auto px-4 pt-4 pb-28">
+
+    <!-- TAB 1: HOME -->
+    <section id="tab-home" class="space-y-4">
+      <!-- Upload & Capture Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-100">Capture / Upload Receipt</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Snap a photo or select an image file to save</p>
+          </div>
+          <span id="home-quality-badge" class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+            360px (~15KB)
+          </span>
+        </div>
+
+        <form id="upload-form" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Select Folder *</label>
+              <select id="upload-folder-select" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Receipt Title / Vendor</label>
+              <input type="text" id="upload-title-input" placeholder="e.g. Target, Starbucks, Electric Bill" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Receipt Image File *</label>
+            <input type="file" id="upload-file-input" accept="image/*" capture="environment" required class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 cursor-pointer" />
+          </div>
+
+          <div id="image-preview-thumbnail-container" class="hidden relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 flex items-center space-x-3">
+            <img id="image-preview-thumbnail" class="w-12 h-12 object-cover rounded-lg" alt="Preview" />
+            <div class="flex-1 min-w-0">
+              <p id="image-preview-filename" class="text-xs font-semibold text-slate-200 truncate"></p>
+              <p id="image-preview-filesize" class="text-[10px] text-emerald-400 font-mono"></p>
+            </div>
+            <button type="button" id="btn-remove-preview-file" class="p-1.5 text-slate-500 hover:text-red-400 rounded-lg">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <button type="submit" id="btn-submit-upload" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            <span>Upload Receipt Image</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Recent Receipts Header & Layout Selector -->
+      <div class="flex items-center justify-between pt-2">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Stored Receipts</h2>
+        <div class="flex items-center space-x-1 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+          <button type="button" id="btn-layout-grid" class="p-1.5 rounded text-xs font-medium text-emerald-400 bg-emerald-500/10">Grid</button>
+          <button type="button" id="btn-layout-list" class="p-1.5 rounded text-xs font-medium text-slate-400 hover:text-slate-200">List</button>
+        </div>
+      </div>
+
+      <!-- Receipts Container -->
+      <div id="home-receipts-list" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <!-- Rendered dynamically by script.js -->
+      </div>
+    </section>
+
+
+    <!-- TAB 2: FOLDERS -->
+    <section id="tab-folders" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+        <h2 class="text-sm font-bold text-slate-100">Folder Management</h2>
+        
+        <form id="create-folder-form" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <input type="text" id="new-folder-name" placeholder="New folder name (e.g. Travel, Hardware)" required class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
+          <button type="submit" class="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+            + Create Folder
+          </button>
+        </form>
+      </div>
+
+      <div id="folders-management-list" class="space-y-2.5">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+
+    <!-- TAB 3: SEARCH & MANAGE -->
+    <section id="tab-search" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <h2 class="text-sm font-bold text-slate-100">Search & Filter Receipts</h2>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input type="text" id="search-query-input" placeholder="Search title or folder..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 placeholder:text-slate-600" />
+          
+          <select id="search-folder-filter" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500">
+            <option value="ALL">All Folders</option>
+            <!-- Rendered dynamically -->
+          </select>
+        </div>
+      </div>
+
+      <div id="search-results-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+
+    <!-- TAB 4: QUICK CLEANUP -->
+    <section id="tab-cleanup" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <h2 class="text-sm font-bold text-slate-100">Quick Cleanup & Bulk Delete</h2>
+        <p class="text-xs text-slate-400">Clean up old receipts or remove selected records in bulk.</p>
+
+        <div id="cleanup-summary" class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+          <span class="text-slate-400">Total Items Stored:</span>
+          <span id="cleanup-total-count" class="font-bold text-emerald-400 font-mono">0 receipts</span>
+        </div>
+
+        <button type="button" id="btn-bulk-delete-all" class="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+          Clear All Receipts
+        </button>
+      </div>
+    </section>
+
+
+    <!-- TAB 5: SETTINGS -->
+    <section id="tab-settings" class="hidden space-y-4">
+      <!-- 1. Single Box JSON Config -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-100">Single Box JSON Config</h2>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Fast Setup</span>
+        </div>
+        <p class="text-xs text-slate-400">Paste your Firebase config object or JS snippet directly below.</p>
+        <textarea id="json-config-textarea" rows="4" placeholder='{\n  "apiKey": "AIzaSy...",\n  "databaseURL": "https://my-app.firebaseio.com",\n  "projectId": "my-app"\n}' class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500 resize-none placeholder:text-slate-700"></textarea>
+
+        <div class="flex flex-col sm:flex-row gap-2.5">
+          <button type="button" id="btn-parse-json-config" class="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+            Parse & Save JSON
+          </button>
+          <button type="button" id="btn-share-magic-link" class="py-2.5 px-4 bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+            Share Magic Link
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Individual Fields -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <h2 class="text-sm font-bold text-slate-100">Individual Project Fields</h2>
+        
+        <form id="individual-config-form" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">API Key *</label>
+              <input type="text" id="field-api-key" placeholder="AIzaSy..." required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Realtime DB URL *</label>
+              <input type="text" id="field-db-url" placeholder="https://your-project.firebaseio.com" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Project ID *</label>
+              <input type="text" id="field-project-id" placeholder="my-app-id" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Storage Bucket</label>
+              <input type="text" id="field-storage-bucket" placeholder="my-app-id.appspot.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+            <button type="button" id="btn-clear-credentials" class="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 text-red-400 font-bold text-xs rounded-lg border border-slate-800 transition cursor-pointer">
+              Clear Credentials
+            </button>
+            <button type="submit" class="py-2.5 px-5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer">
+              Update Config
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 3. Server Storage Calculator -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <h2 class="text-sm font-bold text-slate-100">Server Storage Calculator</h2>
+        <p class="text-xs text-slate-400">Calculate actual storage space used in Firebase Storage or local cache.</p>
+
+        <button type="button" id="btn-calculate-storage" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+          Calculate Server Storage
+        </button>
+
+        <div id="storage-calc-result" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-xs font-mono">
+          <div class="flex justify-between"><span class="text-slate-400">Total Size:</span><span id="calc-total-size" class="text-emerald-400 font-bold"></span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Files Count:</span><span id="calc-file-count" class="text-slate-200"></span></div>
+        </div>
+      </div>
+
+      <!-- 4. Global Upload Quality -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <h2 class="text-sm font-bold text-slate-100">Upload Quality & Speed</h2>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" id="quality-ultralow" class="p-2.5 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 text-center cursor-pointer">
+            <div class="text-[11px] font-bold uppercase">Ultra-Low</div>
+            <div class="text-[9px] opacity-80">360px (~15KB)</div>
+          </button>
+          <button type="button" id="quality-verylow" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer">
+            <div class="text-[11px] font-bold uppercase">Very Low</div>
+            <div class="text-[9px] opacity-80">480px (~30KB)</div>
+          </button>
+          <button type="button" id="quality-low" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-center cursor-pointer">
+            <div class="text-[11px] font-bold uppercase">Low</div>
+            <div class="text-[9px] opacity-80">640px (~50KB)</div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2">
+    <div id="bottom-nav-container" class="max-w-md mx-auto flex items-center justify-around">
+      <!-- Dynamic Nav Items -->
+    </div>
+  </nav>
+
+  <!-- Image Preview Modal -->
+  <div id="image-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col items-center justify-center">
+    <div class="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 id="modal-image-title" class="text-sm font-bold text-slate-100 truncate"></h3>
+        <button type="button" id="btn-close-modal" class="p-1.5 text-slate-400 hover:text-slate-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="max-h-[60vh] overflow-hidden rounded-xl bg-slate-950 flex items-center justify-center">
+        <img id="modal-image-element" class="max-h-[60vh] max-w-full object-contain" alt="Receipt full preview" />
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <span id="modal-image-date" class="text-xs text-slate-400 font-mono"></span>
+        <button type="button" id="btn-delete-modal-image" class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-xs font-bold uppercase transition cursor-pointer">
+          Delete Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-4 right-4 left-4 sm:left-auto sm:max-w-sm z-50 pointer-events-none space-y-2"></div>
+
+  <!-- Relative JavaScript script file -->
+  <script src="./script.js"></script>
+</body>
 </html>
-
