@@ -1,3 +1,22 @@
+// Helper to toggle Eruda visibility
+function setErudaVisibility(visible) {
+  if (typeof eruda !== 'undefined') {
+    try {
+      if (eruda.get && eruda.get('entry')) {
+        if (visible) {
+          eruda.get('entry').show();
+        } else {
+          eruda.get('entry').hide();
+        }
+      }
+      const el = document.getElementById('eruda');
+      if (el) {
+        el.style.display = visible ? 'block' : 'none';
+      }
+    } catch (e) {}
+  }
+}
+
 // ============================================================================
 // 1. ON-SCREEN ERROR RENDERER (MOBILE DEBUGGING)
 // ============================================================================
@@ -51,6 +70,10 @@
   window.onerror = function (msg, source, lineno, colno, error) {
     var stack = error && error.stack ? error.stack : '';
     showErrorOverlay('JavaScript Error', msg, source, lineno, colno, stack);
+    setErudaVisibility(true);
+    localStorage.setItem('app_debug_mode', 'true');
+    var toggle = document.getElementById('setting-debug-toggle');
+    if (toggle) toggle.checked = true;
     return false;
   };
 
@@ -59,6 +82,10 @@
     var msg = reason ? reason.message || String(reason) : 'Unhandled Promise Rejection';
     var stack = reason && reason.stack ? reason.stack : '';
     showErrorOverlay('Unhandled Rejection', msg, '', '', '', stack);
+    setErudaVisibility(true);
+    localStorage.setItem('app_debug_mode', 'true');
+    var toggle = document.getElementById('setting-debug-toggle');
+    if (toggle) toggle.checked = true;
   });
 })();
 
@@ -74,7 +101,6 @@ const DEFAULT_FOLDERS = [
 ];
 
 const DEFAULT_NAV_ITEMS = [
-  { id: 'home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', visible: true },
   { id: 'folders', label: 'Folders', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z', visible: true },
   { id: 'search', label: 'Search', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', visible: true },
   { id: 'cleanup', label: 'Cleanup', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', visible: true },
@@ -275,17 +301,18 @@ function loadLocalData() {
     const rawNav = localStorage.getItem('app_nav_config');
     const loadedNav = rawNav ? JSON.parse(rawNav) : DEFAULT_NAV_ITEMS;
     appState.navItems = loadedNav.filter(
-      (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+      (item) => item.id !== 'home' && item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera' && (item.label || '').toLowerCase() !== 'home'
     );
+    if (!appState.navItems.length) {
+      appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS));
+    }
 
     const savedQuality = localStorage.getItem('app_quality_preference');
     appState.qualityPreference = (savedQuality === 'low') ? 'low' : 'ultralow';
   } catch (e) {
     appState.folders = DEFAULT_FOLDERS;
     appState.receipts = [];
-    appState.navItems = DEFAULT_NAV_ITEMS.filter(
-      (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
-    );
+    appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS));
   }
 }
 
@@ -441,9 +468,7 @@ function toggleNavItemVisibility(id) {
 }
 
 function resetNavItems() {
-  appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS)).filter(
-    (item) => item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
-  );
+  appState.navItems = JSON.parse(JSON.stringify(DEFAULT_NAV_ITEMS));
   saveLocalData();
   renderBottomNav();
   renderNavConfigUI();
@@ -454,10 +479,14 @@ function renderNavConfigUI() {
   const container = document.getElementById('nav-items-manager-list');
   if (!container) return;
 
-  container.innerHTML = appState.navItems
+  const validItems = appState.navItems.filter(
+    (item) => item.id !== 'home' && item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera' && (item.label || '').toLowerCase() !== 'home'
+  );
+
+  container.innerHTML = validItems
     .map((item, idx) => {
       const isFirst = idx === 0;
-      const isLast = idx === appState.navItems.length - 1;
+      const isLast = idx === validItems.length - 1;
 
       return `<div class="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
         <div class="flex items-center space-x-3">
@@ -494,9 +523,12 @@ function renderNavConfigUI() {
 // 7. RENDERERS & VIEW CONTROLLERS
 // ============================================================================
 function switchTab(tabId) {
-  appState.activeTab = tabId || 'folders';
+  if (!tabId || tabId === 'home' || tabId === 'camera') {
+    tabId = 'folders';
+  }
+  appState.activeTab = tabId;
 
-  ['home', 'folders', 'search', 'cleanup', 'settings'].forEach((t) => {
+  ['folders', 'search', 'cleanup', 'settings'].forEach((t) => {
     const el = document.getElementById('tab-' + t);
     if (el) {
       if (t === appState.activeTab) {
@@ -519,7 +551,7 @@ function renderBottomNav() {
   if (!container) return;
 
   const visibleTabs = appState.navItems.filter(
-    (item) => item.visible && item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera'
+    (item) => item.visible && item.id !== 'home' && item.id !== 'camera' && item.id !== 'upload' && (item.label || '').toLowerCase() !== 'camera' && (item.label || '').toLowerCase() !== 'home'
   );
 
   if (!visibleTabs.length) {
@@ -542,7 +574,6 @@ function renderBottomNav() {
 
 function renderAllViews() {
   populateFolderDropdowns();
-  renderHomeReceipts();
   renderFoldersManagement();
   renderSearchResults();
   renderCleanupView();
@@ -1517,4 +1548,18 @@ document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('btn-modal-pwa-install')?.classList.add('hidden');
     }
   });
+
+  // Developer / Debug Mode toggle listener
+  const debugToggle = document.getElementById('setting-debug-toggle');
+  if (debugToggle) {
+    const isDebugActive = localStorage.getItem('app_debug_mode') === 'true';
+    debugToggle.checked = isDebugActive;
+    setErudaVisibility(isDebugActive);
+    debugToggle.addEventListener('change', function (e) {
+      const isChecked = e.target.checked;
+      localStorage.setItem('app_debug_mode', isChecked ? 'true' : 'false');
+      setErudaVisibility(isChecked);
+      showToast(`Developer Debug Mode ${isChecked ? 'Enabled' : 'Disabled'}`, 'info');
+    });
+  }
 });
